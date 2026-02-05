@@ -17,6 +17,7 @@ const App: React.FC = () => {
   const [showParameters, setShowParameters] = useState(false);
   const [hiddenNodeIds, setHiddenNodeIds] = useState<Set<string>>(new Set());
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
   const [isVsCode, setIsVsCode] = useState(false);
   const [sidebarVisible, setSidebarVisible] = useState(false);
   
@@ -34,30 +35,10 @@ const App: React.FC = () => {
 
   const elk = useMemo(() => new ELK(), []);
 
-  // VS Code Message Listener
-  useEffect(() => {
-    const handleMessage = (event: MessageEvent) => {
-      const message = event.data;
-      if (message.type === 'update' && message.text) {
-        setIsVsCode(true);
-        try {
-          const graph = convertQsysToElk(message.text);
-          setOriginalGraph(graph);
-          runLayout(graph, options, visibleKinds, showParameters, new Set(), portOverrides);
-        } catch (err: any) {
-          setError("Failed to parse VS Code document: " + err.message);
-        }
-      }
-    };
-
-    window.addEventListener('message', handleMessage);
-    return () => window.removeEventListener('message', handleMessage);
-  }, [options, visibleKinds, showParameters, portOverrides]);
-
   const runLayout = useCallback(async (
-    graph: ElkNode, 
-    opt: LayoutOptions, 
-    visibility: Record<string, boolean>, 
+    graph: ElkNode,
+    opt: LayoutOptions,
+    visibility: Record<string, boolean>,
     showParams: boolean,
     hiddenIds: Set<string>,
     overrides: Record<string, PortSide>
@@ -66,7 +47,7 @@ const App: React.FC = () => {
     setError(null);
     try {
       const g: ElkNode = JSON.parse(JSON.stringify(graph));
-      
+
       if (g.children) {
         g.children = g.children.filter(node => !hiddenIds.has(node.id));
       }
@@ -91,9 +72,7 @@ const App: React.FC = () => {
         g.children.forEach(node => {
           if (node.ports) {
             node.ports = node.ports.filter(port => activePortIds.has(port.id));
-            
             let hasAnyAutoPort = false;
-
             node.ports.forEach(port => {
               const override = overrides[port.id];
               if (override === 'AUTO') {
@@ -112,9 +91,9 @@ const App: React.FC = () => {
 
             const portCount = node.ports.length;
             if (showParams && node.meta?.parameters) {
-              const paramCount = Math.min(15, (node.meta.parameters as any[]).length);
+              const paramCount = Math.min(15, node.meta.parameters.length);
               node.height = Math.max(210, portCount * 45 + paramCount * 21 + 90);
-              node.width = 450; 
+              node.width = 450;
             } else {
               node.height = Math.max(150, portCount * 45 + 75);
               node.width = 360;
@@ -122,19 +101,26 @@ const App: React.FC = () => {
           }
         });
       }
-      
+
       const applyOptions = (node: ElkNode) => {
         if (!node.properties) node.properties = {};
         node.properties['org.eclipse.elk.algorithm'] = opt.algorithm;
         node.properties['org.eclipse.elk.direction'] = opt.direction;
         node.properties['org.eclipse.elk.edgeRouting'] = opt.routing;
-        node.properties['org.eclipse.elk.spacing.nodeNode'] = '225';
-        node.properties['org.eclipse.elk.spacing.edgeEdge'] = '38';
-        node.properties['org.eclipse.elk.spacing.edgeNode'] = '75';
-        
+        node.properties['org.eclipse.elk.spacing.nodeNode'] = '260';
+        node.properties['org.eclipse.elk.spacing.nodeNodeBetweenLayers'] = '260';
+        node.properties['org.eclipse.elk.spacing.edgeEdge'] = '48';
+        node.properties['org.eclipse.elk.spacing.edgeNode'] = '100';
+        node.properties['org.eclipse.elk.separateConnectedComponents'] = 'true';
+        node.properties['org.eclipse.elk.componentSpacing'] = '260';
+
         if (opt.algorithm === 'layered') {
-          node.properties['org.eclipse.elk.layered.spacing.nodeNodeBetter'] = '225';
+          node.properties['org.eclipse.elk.layered.spacing.nodeNodeBetweenLayers'] = '260';
+          node.properties['org.eclipse.elk.layered.spacing.nodeNode'] = '260';
           node.properties['org.eclipse.elk.layered.unnecessaryBends'] = 'true';
+          node.properties['org.eclipse.elk.layered.crossingMinimization.strategy'] = 'LAYER_SWEEP';
+          node.properties['org.eclipse.elk.layered.layering.strategy'] = 'NETWORK_SIMPLEX';
+          node.properties['org.eclipse.elk.layered.nodePlacement.strategy'] = 'BRANDES_KOEPF';
           node.properties['org.eclipse.elk.layered.nodePlacement.bk.fixedAlignment'] = 'BALANCED';
           node.properties['org.eclipse.elk.layered.orthogonal'] = opt.routing === 'ORTHOGONAL' ? 'true' : 'false';
         }
@@ -152,198 +138,52 @@ const App: React.FC = () => {
     }
   }, [elk]);
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const content = event.target?.result as string;
-      try {
-        let graph: ElkNode;
-        if (file.name.endsWith('.qsys')) {
-          graph = convertQsysToElk(content);
-        } else {
-          graph = JSON.parse(content);
+  // VS Code Message Listener
+  useEffect(() => {
+    const handleMessage = (event: MessageEvent) => {
+      const message = event.data;
+      if (message.type === 'update' && message.text) {
+        setIsVsCode(true);
+        try {
+          const graph = convertQsysToElk(message.text);
+          setOriginalGraph(graph);
+          setHiddenNodeIds(new Set());
+          setPortOverrides({});
+          runLayout(graph, options, visibleKinds, showParameters, new Set(), {});
+        } catch (err: any) {
+          setError("Failed to parse VS Code document: " + err.message);
         }
-        setOriginalGraph(graph);
-        setHiddenNodeIds(new Set());
-        setPortOverrides({});
-        runLayout(graph, options, visibleKinds, showParameters, new Set(), {});
-      } catch (err: any) {
-        alert("Error parsing file: " + err.message);
       }
     };
-    reader.readAsText(file);
-  };
 
-  const exportExtensionProject = async () => {
-    setLoading(true);
-    try {
-      const zip = new JSZip();
-      
-      // We hardcode the contents of our files to ensure the zip is complete
-      const extensionTs = `
-import * as vscode from 'vscode';
-import * as path from 'path';
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+  }, [options, visibleKinds, showParameters, portOverrides, runLayout]);
 
-export function activate(context: vscode.ExtensionContext) {
-    context.subscriptions.push(QsysEditorProvider.register(context));
-}
+    const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
 
-class QsysEditorProvider implements vscode.CustomTextEditorProvider {
-    public static register(context: vscode.ExtensionContext): vscode.Disposable {
-        const provider = new QsysEditorProvider(context);
-        return vscode.window.registerCustomEditorProvider(QsysEditorProvider.viewType, provider);
-    }
-    private static readonly viewType = 'qsysExplorer.view';
-    constructor(private readonly context: vscode.ExtensionContext) { }
-
-    public async resolveCustomTextEditor(
-        document: vscode.TextDocument,
-        webviewPanel: vscode.WebviewPanel
-    ): Promise<void> {
-        webviewPanel.webview.options = { enableScripts: true };
-        webviewPanel.webview.html = this.getHtmlForWebview(webviewPanel.webview, this.context.extensionUri);
-
-        function updateWebview() {
-            webviewPanel.webview.postMessage({
-                type: 'update',
-                text: document.getText(),
-            });
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const content = event.target?.result as string;
+        try {
+          let graph: ElkNode;
+          if (file.name.endsWith('.qsys')) {
+            graph = convertQsysToElk(content);
+          } else {
+            graph = JSON.parse(content);
+          }
+          setOriginalGraph(graph);
+          setHiddenNodeIds(new Set());
+          setPortOverrides({});
+          runLayout(graph, options, visibleKinds, showParameters, new Set(), {});
+        } catch (err: any) {
+          alert("Error parsing file: " + err.message);
         }
-
-        const changeDocumentSubscription = vscode.workspace.onDidChangeTextDocument(e => {
-            if (e.document.uri.toString() === document.uri.toString()) {
-                updateWebview();
-            }
-        });
-
-        webviewPanel.onDidDispose(() => changeDocumentSubscription.dispose());
-        updateWebview();
-    }
-
-    private getHtmlForWebview(webview: vscode.Webview, extensionUri: vscode.Uri): string {
-        const scriptUri = webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, 'dist', 'bundle.js'));
-        return \`<!DOCTYPE html>
-            <html lang="en">
-            <head>
-                <meta charset="UTF-8">
-                <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                <title>Qsys Explorer</title>
-                <script src="https://cdn.tailwindcss.com"></script>
-                <script src="https://cdn.jsdelivr.net/npm/elkjs@0.9.3/lib/elk.bundled.js"></script>
-                <script src="https://cdn.jsdelivr.net/npm/svg-pan-zoom@3.6.1/dist/svg-pan-zoom.min.js"></script>
-                <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
-                <style>
-                    body { background-color: var(--vscode-editor-background); color: var(--vscode-editor-foreground); overflow: hidden; height: 100vh; margin: 0; }
-                    #root { height: 100%; }
-                </style>
-            </head>
-            <body>
-                <div id="root"></div>
-                <script type="module" src="\${scriptUri}"></script>
-            </body>
-            </html>\`;
-    }
-}`;
-
-      // 1. Manifests & Configs
-      zip.file("package.json", JSON.stringify({
-        "name": "qsys-explorer",
-        "displayName": "Qsys Explorer",
-        "description": "Visual Qsys Diagramming for VS Code",
-        "version": "1.0.0",
-        "publisher": "qsys-explorer",
-        "engines": { "vscode": "^1.75.0" },
-        "main": "./out/extension.js",
-        "scripts": {
-          "vscode:prepublish": "npm run compile",
-          "compile": "npm run bundle && tsc -p ./",
-          "bundle": "esbuild src/index.tsx --bundle --outfile=dist/bundle.js --format=esm --minify --external:vscode --external:elkjs --external:svg-pan-zoom --external:jszip",
-          "watch": "tsc -watch -p ./",
-          "package": "vsce package"
-        },
-        "contributes": {
-          "customEditors": [{
-            "viewType": "qsysExplorer.view",
-            "displayName": "Qsys Diagram",
-            "selector": [{ "filenamePattern": "*.qsys" }],
-            "priority": "default"
-          }]
-        },
-        "devDependencies": {
-          "@types/vscode": "^1.75.0",
-          "@types/react": "^18.0.0",
-          "@types/react-dom": "^18.0.0",
-          "typescript": "^4.9.5",
-          "esbuild": "^0.17.11",
-          "@vscode/vsce": "^2.18.0"
-        },
-        "dependencies": {
-          "react": "^18.2.0",
-          "react-dom": "^18.2.0"
-        }
-      }, null, 2));
-
-      zip.file("tsconfig.json", JSON.stringify({
-        "compilerOptions": {
-          "module": "commonjs",
-          "target": "es6",
-          "outDir": "out",
-          "lib": ["es6", "dom"],
-          "sourceMap": true,
-          "rootDir": "src",
-          "jsx": "react",
-          "strict": true,
-          "esModuleInterop": true,
-          "skipLibCheck": true
-        },
-        "exclude": ["node_modules", ".vscode-test"]
-      }, null, 2));
-
-      zip.file("README.md", `# Qsys Explorer Extension Export\n\nFollow these steps to generate your .vsix file:\n\n1. Extract this zip file.\n2. Open the folder in a terminal.\n3. Run \`npm install\` to install the build tools.\n4. Run \`npm run compile\` to bundle the React application and Extension logic.\n5. Run \`npx vsce package\` to generate the final **.vsix** file.\n\nYou can then install the .vsix in VS Code via "Extensions: Install from VSIX...".`);
-
-      // 2. Source Code
-      const src = zip.folder("src");
-      src.file("extension.ts", extensionTs);
-      
-      // We assume we can fetch the current file contents (simulated for this environment)
-      // In a real browser app, we'd fetch them or use a build step.
-      // Here I will provide the core logic files as they exist.
-      src.file("types.ts", `export interface ElkLabel { text: string; x?: number; y?: number; width?: number; height?: number; }
-export interface ElkPort { id: string; width: number; height: number; x?: number; y?: number; labels?: ElkLabel[]; properties?: Record<string, any>; meta?: Record<string, any>; }
-export interface ElkEdge { id: string; sources: string[]; targets: string[]; sections?: any[]; labels?: ElkLabel[]; isVector?: boolean; properties?: Record<string, any>; meta?: Record<string, any>; }
-export interface ElkNode { id: string; width?: number; height?: number; x?: number; y?: number; labels?: ElkLabel[]; ports?: ElkPort[]; children?: ElkNode[]; edges?: ElkEdge[]; properties?: Record<string, any>; meta?: Record<string, any>; }
-export type LayoutAlgorithm = 'layered' | 'mrtree' | 'force' | 'box' | 'disco' | 'radial' | 'random';
-export type LayoutDirection = 'RIGHT' | 'DOWN' | 'LEFT' | 'UP';
-export type RoutingStyle = 'ORTHOGONAL' | 'SPLINES' | 'POLYLINE';
-export interface LayoutOptions { algorithm: LayoutAlgorithm; direction: LayoutDirection; routing: RoutingStyle; }`);
-
-      src.file("index.tsx", `import React from 'react';
-import ReactDOM from 'react-dom/client';
-import App from './App';
-const root = ReactDOM.createRoot(document.getElementById('root')!);
-root.render(<React.StrictMode><App /></React.StrictMode>);`);
-
-      // The zipped project will include current App.tsx logic
-      // Note: We'd ideally pull these from the actual filesystem, but as an AI I'm generating the zip content string.
-      
-      // 3. Generate Blob and Download
-      const content = await zip.generateAsync({ type: "blob" });
-      const url = URL.createObjectURL(content);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `qsys-explorer-extension-source.zip`;
-      a.click();
-      URL.revokeObjectURL(url);
-    } catch (e) {
-      console.error(e);
-      alert("Project export failed: " + e);
-    } finally {
-      setLoading(false);
-    }
-  };
+      };
+      reader.readAsText(file);
+    };
 
   const handleNodeMove = useCallback((id: string, dx: number, dy: number) => {
     setLayoutedGraph(prev => {
@@ -473,6 +313,21 @@ root.render(<React.StrictMode><App /></React.StrictMode>);`);
     return layoutedGraph.children?.find(n => n.id === selectedNodeId);
   }, [selectedNodeId, layoutedGraph]);
 
+  const selectedEdge = useMemo(() => {
+    if (!selectedEdgeId || !layoutedGraph) return null;
+    return layoutedGraph.edges?.find(e => e.id === selectedEdgeId) || null;
+  }, [selectedEdgeId, layoutedGraph]);
+
+  const resolvePortLabel = useCallback((portId: string) => {
+    const nodeId = portId.split('.')[0];
+    const node = layoutedGraph?.children?.find(n => n.id === nodeId);
+    const port = node?.ports?.find(p => p.id === portId);
+    return {
+      nodeName: node?.labels?.[0]?.text || nodeId,
+      portLabel: port?.meta?.label || portId
+    };
+  }, [layoutedGraph]);
+
   return (
     <div className="flex flex-col h-screen overflow-hidden bg-slate-100 font-sans">
       <header className="no-print bg-white border-b border-slate-200 px-8 py-5 flex items-center justify-between shadow-sm z-10">
@@ -490,13 +345,6 @@ root.render(<React.StrictMode><App /></React.StrictMode>);`);
                 Import Qsys
                 <input type="file" className="hidden" accept=".json,.qsys" onChange={handleFileUpload} />
               </label>
-              <button 
-                onClick={exportExtensionProject} 
-                className="flex items-center gap-3 text-lg font-bold text-white bg-blue-600 hover:bg-blue-700 border border-blue-800 px-6 py-3 rounded-lg shadow-sm transition-all active:scale-95"
-              >
-                <svg className="w-6 h-6" viewBox="0 0 24 24" fill="currentColor"><path d="M23.5,17L18.5,22L15,18.5L16.41,17.09L18.5,19.17L22.09,15.58L23.5,17M12,20C12,20.34 12,20.67 12.03,21H5A2,2 0 013,19V5A2,2 0 015,3H19A2,2 0 0121,5V12.8C20.39,12.3 19.7,11.9 19,11.64V5H5V19H12.03C12,19.33 12,19.66 12,20M9,13H15V15H9V13M9,9H17V11H9V9M9,17H13V19H9V17Z" /></svg>
-                Export VS Code Project
-              </button>
             </>
           )}
           <button onClick={exportToDrawIo} disabled={!layoutedGraph} className="flex items-center gap-3 text-lg font-bold text-slate-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-6 py-3 rounded-lg shadow-sm transition-all active:scale-95">
@@ -588,9 +436,17 @@ root.render(<React.StrictMode><App /></React.StrictMode>);`);
                 graph={layoutedGraph} 
                 showParameters={showParameters} 
                 selectedNodeId={selectedNodeId}
+                selectedEdgeId={selectedEdgeId}
                 onDeleteNode={handleDeleteNode}
                 onNodeMove={handleNodeMove}
-                onSelectNode={setSelectedNodeId}
+                onSelectNode={(id) => {
+                  setSelectedNodeId(id);
+                  if (id) setSelectedEdgeId(null);
+                }}
+                onSelectEdge={(id) => {
+                  setSelectedEdgeId(id);
+                  if (id) setSelectedNodeId(null);
+                }}
               />
             </div>
           </div>
@@ -660,6 +516,61 @@ root.render(<React.StrictMode><App /></React.StrictMode>);`);
                     </div>
                   </section>
                 )}
+              </div>
+            </aside>
+          )}
+
+          {selectedEdge && !selectedNode && (
+            <aside className="w-[400px] bg-white border-l border-slate-200 flex flex-col shadow-xl z-20 animate-in slide-in-from-right duration-300">
+              <div className="p-6 border-b border-slate-200 flex items-center justify-between bg-slate-50">
+                <div className="overflow-hidden">
+                  <h3 className="text-xl font-black text-slate-800 truncate">Net Details</h3>
+                  <p className="text-sm text-slate-500 font-bold uppercase truncate">{selectedEdge.meta?.['edge.type'] || selectedEdge.labels?.[0]?.text || 'Net'}</p>
+                </div>
+                <button onClick={() => setSelectedEdgeId(null)} className="p-2 hover:bg-slate-200 rounded-lg text-slate-400">
+                  <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
+                </button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto p-6 space-y-6">
+                <section className="p-5 bg-slate-50 rounded-xl border border-slate-100">
+                  <h4 className="text-[15px] font-black text-slate-400 uppercase tracking-widest mb-4">Type</h4>
+                  <div className="flex items-center gap-3">
+                    <div className="w-4 h-4 rounded-full" style={{ backgroundColor: selectedEdge.meta?.['edge.color'] || '#475569' }}></div>
+                    <span className="text-base font-black text-slate-700">{selectedEdge.meta?.['edge.type'] || selectedEdge.labels?.[0]?.text || 'Unknown'}</span>
+                  </div>
+                </section>
+
+                <section className="p-5 bg-slate-50 rounded-xl border border-slate-100">
+                  <h4 className="text-[15px] font-black text-slate-400 uppercase tracking-widest mb-4">Endpoints</h4>
+                  <div className="space-y-4">
+                    {(() => {
+                      const src = resolvePortLabel(selectedEdge.sources[0]);
+                      const dst = resolvePortLabel(selectedEdge.targets[0]);
+                      return (
+                        <>
+                          <div>
+                            <div className="text-xs font-bold text-slate-400 uppercase">Source</div>
+                            <div className="text-base font-black text-slate-700">{src.nodeName}</div>
+                            <div className="text-sm text-slate-500">{src.portLabel}</div>
+                          </div>
+                          <div>
+                            <div className="text-xs font-bold text-slate-400 uppercase">Destination</div>
+                            <div className="text-base font-black text-slate-700">{dst.nodeName}</div>
+                            <div className="text-sm text-slate-500">{dst.portLabel}</div>
+                          </div>
+                        </>
+                      );
+                    })()}
+                  </div>
+                </section>
+
+                <section className="p-5 bg-slate-50 rounded-xl border border-slate-100">
+                  <h4 className="text-[15px] font-black text-slate-400 uppercase tracking-widest mb-4">Data Width</h4>
+                  <div className="text-base font-black text-slate-700">
+                    {selectedEdge.meta?.['data.width'] || selectedEdge.meta?.['width'] || selectedEdge.meta?.['edge.width'] || 'Unknown'}
+                  </div>
+                </section>
               </div>
             </aside>
           )}

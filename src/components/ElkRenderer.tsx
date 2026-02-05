@@ -6,9 +6,11 @@ interface ElkRendererProps {
   graph: ElkNode | null;
   showParameters: boolean;
   selectedNodeId: string | null;
+  selectedEdgeId: string | null;
   onDeleteNode: (id: string) => void;
   onNodeMove: (id: string, dx: number, dy: number) => void;
   onSelectNode: (id: string | null) => void;
+  onSelectEdge: (id: string | null) => void;
 }
 
 declare const svgPanZoom: any;
@@ -17,9 +19,11 @@ const ElkRenderer: React.FC<ElkRendererProps> = ({
   graph, 
   showParameters, 
   selectedNodeId,
+  selectedEdgeId,
   onDeleteNode, 
   onNodeMove,
-  onSelectNode
+  onSelectNode,
+  onSelectEdge
 }) => {
   const svgRef = useRef<SVGSVGElement>(null);
   const viewportRef = useRef<SVGGElement>(null);
@@ -137,6 +141,7 @@ const ElkRenderer: React.FC<ElkRendererProps> = ({
   const handleSvgClick = (e: React.MouseEvent) => {
     if (e.target === svgRef.current) {
       onSelectNode(null);
+      onSelectEdge(null);
     }
   };
 
@@ -399,9 +404,10 @@ const ElkRenderer: React.FC<ElkRendererProps> = ({
       return { x: ax, y: ay, side: p.side };
     };
     
-    // Check if this source has multiple connections (fan-out)
+    // Check if this source has multiple distinct targets (fan-out)
     const siblingEdges = edgesBySource.get(edge.sources[0]) || [];
-    const hasFanOut = siblingEdges.length > 1;
+    const uniqueTargets = new Set(siblingEdges.map(e => e.targets[0]));
+    const hasFanOut = uniqueTargets.size > 1;
     const edgeIndex = siblingEdges.indexOf(edge);
     
     // Get channel offset for this edge
@@ -530,8 +536,10 @@ const ElkRenderer: React.FC<ElkRendererProps> = ({
     const targetAnchor = getAnchor(targetPos);
     const { path, junctions } = createSchematicPath(sourceAnchor, targetAnchor);
     
+    const isSelected = selectedEdgeId === edge.id;
+
     return (
-      <g key={edge.id} pointerEvents="none">
+      <g key={edge.id}>
         <defs>
           <marker id={markerId} markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto">
             <path d="M0,0 L6,3 L0,6 Z" fill={edgeColor} />
@@ -545,7 +553,29 @@ const ElkRenderer: React.FC<ElkRendererProps> = ({
           strokeWidth={edge.isVector ? "3.5" : "2"}
           markerEnd={`url(#${markerId})`}
           strokeLinejoin="round"
+          opacity={isSelected ? 1 : 0.9}
         />
+        {/* Hit area for selection */}
+        <path
+          d={path}
+          fill="none"
+          stroke="transparent"
+          strokeWidth={edge.isVector ? "12" : "10"}
+          onClick={(e) => {
+            e.stopPropagation();
+            onSelectEdge(edge.id);
+          }}
+        />
+        {isSelected && (
+          <path
+            d={path}
+            fill="none"
+            stroke="#2563eb"
+            strokeWidth={edge.isVector ? "4.5" : "3"}
+            strokeLinejoin="round"
+            opacity={0.7}
+          />
+        )}
         {/* Junction points (filled circles where wires branch) */}
         {junctions.map((j, idx) => (
           <circle
@@ -574,8 +604,8 @@ const ElkRenderer: React.FC<ElkRendererProps> = ({
     >
       <g className="svg-pan-zoom_viewport" ref={viewportRef}>
         <g transform={`translate(${padding}, ${padding})`}>
-          {graph.edges?.map(renderEdge)}
           {graph.children?.map(renderNode)}
+          {graph.edges?.map(renderEdge)}
         </g>
       </g>
     </svg>
