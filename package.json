@@ -3,7 +3,7 @@
   "displayName": "Qsys Vizualizer",
   "description": "Visual Qsys Diagramming for VS Code",
   "version": "1.0.0",
-  "publisher": "688bb0ce-6ea2-6785-9c88-cb4f3314b946",
+  "publisher": "HassanEbrahimi",
   "repository": {
     "type": "git",
     "url": "https://github.com/Ha333an/qsys_viz.git"
