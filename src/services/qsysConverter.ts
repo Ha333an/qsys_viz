@@ -52,7 +52,10 @@ export function convertQsysToElk(xmlString: string): ElkNode {
 
   const modules = xmlDoc.getElementsByTagName('module');
   const connections = xmlDoc.getElementsByTagName('connection');
+  const interfaces = xmlDoc.getElementsByTagName('interface');
   const moduleMap = new Map<string, ElkNode>();
+  const connectedPortIds = new Set<string>();
+  const unconnectedInterfacePorts: Array<{ portId: string; label: string; kind: ConnectionKind; color: string; dir: string }> = [];
 
   // 1. Process Modules
   Array.from(modules).forEach((mod) => {
@@ -107,6 +110,8 @@ export function convertQsysToElk(xmlString: string): ElkNode {
     if (sourceNode && targetNode) {
       const sourcePortId = `${startMod}.${startIntf}`;
       const targetPortId = `${endMod}.${endIntf}`;
+      connectedPortIds.add(sourcePortId);
+      connectedPortIds.add(targetPortId);
 
       if (!sourceNode.ports?.find(p => p.id === sourcePortId)) {
         sourceNode.ports?.push({
@@ -150,10 +155,133 @@ export function convertQsysToElk(xmlString: string): ElkNode {
     }
   });
 
+  // 3. Process Interfaces to catch any ports not defined by connections
+  Array.from(interfaces).forEach((intf) => {
+    const internal = intf.getAttribute('internal') || '';
+    const qsysKind = intf.getAttribute('type') || 'unknown';
+    const dir = intf.getAttribute('dir') || 'end';
+    const internalKind = mapQsysKindToInternal(qsysKind);
+    const color = getKindColor(qsysKind);
+    
+    const [modName, intfName] = internal.split('.');
+    if (!modName || !intfName) return;
+
+    const node = moduleMap.get(modName);
+    if (node) {
+      const portId = internal;
+      if (!node.ports?.find(p => p.id === portId)) {
+        node.ports?.push({
+          id: portId,
+          width: 22,
+          height: 22,
+          properties: { 'org.eclipse.elk.port.side': dir === 'start' ? 'EAST' : 'WEST' },
+          meta: {
+            'label': intfName,
+            'interface.color': color,
+            'internalKind': internalKind,
+          }
+        });
+      }
+
+      if (!connectedPortIds.has(portId)) {
+        unconnectedInterfacePorts.push({
+          portId,
+          label: intfName,
+          kind: internalKind,
+          color,
+          dir,
+        });
+      }
+    }
+  });
+
+  if (unconnectedInterfacePorts.length > 0) {
+    const externalInputs = unconnectedInterfacePorts.filter(intf => intf.dir !== 'start');
+    const externalOutputs = unconnectedInterfacePorts.filter(intf => intf.dir === 'start');
+
+    const makeExternalNode = (id: string, label: string, portCount: number): ElkNode => ({
+      id,
+      width: 300,
+      height: Math.max(150, portCount * 30 + 80),
+      labels: [{ text: label }],
+      ports: [],
+      properties: {
+        'org.eclipse.elk.portConstraints': 'FIXED_SIDE',
+        'org.eclipse.elk.spacing.portPort': '24'
+      },
+      meta: {
+        kind: 'external'
+      }
+    });
+
+    const externalInputNode = externalInputs.length > 0
+      ? makeExternalNode('__external_input__', 'External Inputs', externalInputs.length)
+      : null;
+    const externalOutputNode = externalOutputs.length > 0
+      ? makeExternalNode('__external_output__', 'External Outputs', externalOutputs.length)
+      : null;
+
+    externalInputs.forEach((intf, index) => {
+      if (!externalInputNode) return;
+      const externalPortId = `__external_input__.${intf.portId}`;
+      externalInputNode.ports?.push({
+        id: externalPortId,
+        width: 18,
+        height: 18,
+        properties: { 'org.eclipse.elk.port.side': 'EAST' },
+        meta: {
+          label: intf.label,
+          'interface.color': intf.color,
+          internalKind: intf.kind,
+        }
+      });
+
+      rootNode.edges?.push({
+        id: `ext_in_edge_${index}`,
+        sources: [externalPortId],
+        targets: [intf.portId],
+        labels: [{ text: 'external' }],
+        meta: {
+          'edge.color': intf.color,
+          'edge.type': intf.kind
+        }
+      });
+    });
+
+    externalOutputs.forEach((intf, index) => {
+      if (!externalOutputNode) return;
+      const externalPortId = `__external_output__.${intf.portId}`;
+      externalOutputNode.ports?.push({
+        id: externalPortId,
+        width: 18,
+        height: 18,
+        properties: { 'org.eclipse.elk.port.side': 'WEST' },
+        meta: {
+          label: intf.label,
+          'interface.color': intf.color,
+          internalKind: intf.kind,
+        }
+      });
+
+      rootNode.edges?.push({
+        id: `ext_out_edge_${index}`,
+        sources: [intf.portId],
+        targets: [externalPortId],
+        labels: [{ text: 'external' }],
+        meta: {
+          'edge.color': intf.color,
+          'edge.type': intf.kind
+        }
+      });
+    });
+
+    if (externalInputNode) rootNode.children?.push(externalInputNode);
+    if (externalOutputNode) rootNode.children?.push(externalOutputNode);
+  }
+
   rootNode.children?.forEach(node => {
     const portCount = node.ports?.length || 0;
     node.height = Math.max(150, portCount * 45 + 90); // Scaled 100, 30, 60 * 1.5
   });
-
   return rootNode;
 }

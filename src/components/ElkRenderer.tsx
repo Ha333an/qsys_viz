@@ -149,31 +149,56 @@ const ElkRenderer: React.FC<ElkRendererProps> = ({
   const portPositions = useMemo(() => {
     const positions = new Map<string, { x: number; y: number; side: string; w: number; h: number }>();
     graph?.children?.forEach(node => {
+      const nodeX = node.x || 0;
+      const nodeY = node.y || 0;
+      const nodeW = node.width || 0;
+      const nodeH = node.height || 0;
+      
+      // Group ports by side
+      const portsBySide = { WEST: [] as ElkPort[], EAST: [] as ElkPort[], NORTH: [] as ElkPort[], SOUTH: [] as ElkPort[] };
       node.ports?.forEach(port => {
-        const side = port.properties?.['org.eclipse.elk.port.side'] || 'EAST';
-        const inset = 2;
-        const pw = port.width || 0;
-        const ph = port.height || 0;
+        const side = (port.properties?.['org.eclipse.elk.port.side'] || 'EAST') as keyof typeof portsBySide;
+        portsBySide[side].push(port);
+      });
 
-        let adjustedX = port.x || 0;
-        let adjustedY = port.y || 0;
+      // Calculate positions for each port based on its side
+      Object.entries(portsBySide).forEach(([side, ports]) => {
+        ports.forEach((port, index) => {
+          const pw = port.width || 0;
+          const ph = port.height || 0;
+          const inset = 2;
+          let adjustedX = 0;
+          let adjustedY = 0;
 
-        if (side === "WEST") {
-          adjustedX = inset;
-        } else if (side === "EAST") {
-          adjustedX = Math.max(inset, (node.width || 0) - pw - inset);
-        } else if (side === "NORTH") {
-          adjustedY = inset;
-        } else if (side === "SOUTH") {
-          adjustedY = Math.max(inset, (node.height || 0) - ph - inset);
-        }
+          if (side === "WEST") {
+            adjustedX = inset;
+            const portSpacing = ports.length > 1 ? (nodeH - 20) / (ports.length + 1) : nodeH / 2;
+            adjustedY = (index + 1) * portSpacing - ph / 2;
+          } else if (side === "EAST") {
+            adjustedX = Math.max(inset, nodeW - pw - inset);
+            const portSpacing = ports.length > 1 ? (nodeH - 20) / (ports.length + 1) : nodeH / 2;
+            adjustedY = (index + 1) * portSpacing - ph / 2;
+          } else if (side === "NORTH") {
+            adjustedY = inset;
+            const portSpacing = ports.length > 1 ? (nodeW - 20) / (ports.length + 1) : nodeW / 2;
+            adjustedX = (index + 1) * portSpacing - pw / 2;
+          } else if (side === "SOUTH") {
+            adjustedY = Math.max(inset, nodeH - ph - inset);
+            const portSpacing = ports.length > 1 ? (nodeW - 20) / (ports.length + 1) : nodeW / 2;
+            adjustedX = (index + 1) * portSpacing - pw / 2;
+          }
 
-        positions.set(port.id, {
-          x: (node.x || 0) + adjustedX + pw / 2,
-          y: (node.y || 0) + adjustedY + ph / 2,
-          side,
-          w: pw,
-          h: ph
+          // Clamp to bounds
+          adjustedX = Math.max(inset, Math.min(adjustedX, nodeW - pw - inset));
+          adjustedY = Math.max(inset, Math.min(adjustedY, nodeH - ph - inset));
+
+          positions.set(port.id, {
+            x: nodeX + adjustedX + pw / 2,
+            y: nodeY + adjustedY + ph / 2,
+            side,
+            w: pw,
+            h: ph
+          });
         });
       });
     });
@@ -230,39 +255,35 @@ const ElkRenderer: React.FC<ElkRendererProps> = ({
     const side = port.properties?.['org.eclipse.elk.port.side'] || 'WEST';
     const color = port.meta?.['interface.color'] || '#94a3b8';
     const labelText = port.meta?.label || port.id;
+    const pw = port.width || 0;
+    const ph = port.height || 0;
     
-    // Move ports fully inside and align them to the inner edge (minimal inset)
-    const inset = 2; // Small inset so squares touch the module border from inside
-    let adjustedX = port.x!;
-    let adjustedY = port.y!;
-    
-    if (side === "WEST") {
-      adjustedX = inset;
-    } else if (side === "EAST") {
-      adjustedX = Math.max(inset, (node.width || 0) - (port.width || 0) - inset);
-    } else if (side === "NORTH") {
-      adjustedY = inset;
-    } else if (side === "SOUTH") {
-      adjustedY = Math.max(inset, (node.height || 0) - (port.height || 0) - inset);
+    // Use the same computed center used by edge routing so ports and nets always align.
+    const pos = portPositions.get(port.id);
+    let adjustedX = (port.x || 0);
+    let adjustedY = (port.y || 0);
+    if (pos) {
+      adjustedX = pos.x - (node.x || 0) - pw / 2;
+      adjustedY = pos.y - (node.y || 0) - ph / 2;
     }
     
     // Position text labels closer to the port
-    let tx = adjustedX + port.width / 2;
-    let ty = adjustedY + port.height / 2;
+    let tx = adjustedX + pw / 2;
+    let ty = adjustedY + ph / 2;
     let anchor: "start" | "middle" | "end" = "middle";
 
     if (side === "WEST") {
-      tx = adjustedX + port.width + 6;
+      tx = adjustedX + pw + 6;
       anchor = "start";
     } else if (side === "EAST") {
       tx = adjustedX - 6;
       anchor = "end";
     } else if (side === "NORTH") {
-      tx = adjustedX + port.width / 2;
-      ty = adjustedY + port.height + 14;
+      tx = adjustedX + pw / 2;
+      ty = adjustedY + ph + 14;
       anchor = "middle";
     } else if (side === "SOUTH") {
-      tx = adjustedX + port.width / 2;
+      tx = adjustedX + pw / 2;
       ty = adjustedY - 6;
       anchor = "middle";
     }
@@ -272,8 +293,8 @@ const ElkRenderer: React.FC<ElkRendererProps> = ({
         <rect
           x={adjustedX}
           y={adjustedY}
-          width={port.width}
-          height={port.height}
+          width={pw}
+          height={ph}
           fill={color}
           stroke="#ffffff"
           strokeWidth="2"
@@ -394,14 +415,7 @@ const ElkRenderer: React.FC<ElkRendererProps> = ({
     const targetPos = portPositions.get(edge.targets[0]);
 
     const getAnchor = (p: { x: number; y: number; side: string; w: number; h: number }) => {
-      const offset = (p.side === 'NORTH' || p.side === 'SOUTH') ? (p.h / 2 + 2) : (p.w / 2 + 2);
-      let ax = p.x;
-      let ay = p.y;
-      if (p.side === 'EAST') ax += offset;
-      else if (p.side === 'WEST') ax -= offset;
-      else if (p.side === 'NORTH') ay -= offset;
-      else if (p.side === 'SOUTH') ay += offset;
-      return { x: ax, y: ay, side: p.side };
+      return { x: p.x, y: p.y, side: p.side };
     };
     
     // Check if this source has multiple distinct targets (fan-out)

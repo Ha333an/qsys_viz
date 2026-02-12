@@ -34,6 +34,10 @@ const App: React.FC = () => {
   );
 
   const elk = useMemo(() => new ELK(), []);
+  const vscodeApi = useMemo(() => {
+    const api = (window as any).acquireVsCodeApi;
+    return typeof api === 'function' ? api() : null;
+  }, []);
 
   const runLayout = useCallback(async (
     graph: ElkNode,
@@ -71,7 +75,9 @@ const App: React.FC = () => {
       if (g.children) {
         g.children.forEach(node => {
           if (node.ports) {
-            node.ports = node.ports.filter(port => activePortIds.has(port.id));
+            if (activePortIds.size > 0) {
+              node.ports = node.ports.filter(port => activePortIds.has(port.id));
+            }
             let hasAnyAutoPort = false;
             node.ports.forEach(port => {
               const override = overrides[port.id];
@@ -140,10 +146,22 @@ const App: React.FC = () => {
 
   // VS Code Message Listener
   useEffect(() => {
+    if (vscodeApi) {
+      vscodeApi.postMessage({ type: 'ready' });
+    }
+  }, [vscodeApi]);
+
+  useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
       const message = event.data;
-      if (message.type === 'update' && message.text) {
+      if (message.type === 'update') {
         setIsVsCode(true);
+        if (!message.text || !message.text.trim()) {
+          setOriginalGraph(null);
+          setLayoutedGraph(null);
+          setError(null);
+          return;
+        }
         try {
           const graph = convertQsysToElk(message.text);
           setOriginalGraph(graph);

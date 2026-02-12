@@ -34,7 +34,16 @@ class QsysEditorProvider implements vscode.CustomTextEditorProvider {
             }
         });
 
-        webviewPanel.onDidDispose(() => changeDocumentSubscription.dispose());
+        const messageSubscription = webviewPanel.webview.onDidReceiveMessage(message => {
+            if (message?.type === 'ready') {
+                updateWebview();
+            }
+        });
+
+        webviewPanel.onDidDispose(() => {
+            changeDocumentSubscription.dispose();
+            messageSubscription.dispose();
+        });
         updateWebview();
     }
 
