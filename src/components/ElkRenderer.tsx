@@ -333,6 +333,16 @@ const ElkRenderer: React.FC<ElkRendererProps> = ({
     const displayParams = showParameters && params.length > 0 && (node.height || 0) > 180; 
     const isDragging = dragState?.nodeId === node.id;
     const isSelected = selectedNodeId === node.id;
+    const nodeKind = String(node.meta?.kind || '');
+
+    let nodeFill = 'gray';
+    if (node.id === '__external_input__') {
+      nodeFill = '#dbeafe';
+    } else if (node.id === '__external_output__') {
+      nodeFill = '#ffedd5';
+    } else if (nodeKind.startsWith('altera_')) {
+      nodeFill = '#dbeafe';
+    }
 
     return (
       <g 
@@ -345,7 +355,7 @@ const ElkRenderer: React.FC<ElkRendererProps> = ({
           width={node.width}
           height={node.height}
           rx="12"
-          fill="white"
+          fill={nodeFill}
           stroke={isSelected ? "#4f46e5" : isDragging ? "#818cf8" : "#cbd5e1"}
           strokeWidth={isSelected || isDragging ? "4" : "3"}
           style={isSelected ? { filter: 'drop-shadow(0 0 12px rgba(79, 70, 229, 0.4))' } : {}}
@@ -423,6 +433,7 @@ const ElkRenderer: React.FC<ElkRendererProps> = ({
   const renderEdge = (edge: ElkEdge) => {
     const edgeColor = edge.meta?.['edge.color'] || '#475569';
     const markerId = `arrow-${edge.id}`;
+    const selectedMarkerId = `arrow-selected-${edge.id}`;
     const hasSections = !!(edge.sections && edge.sections.length > 0);
     
     const sourcePos = portPositions.get(edge.sources[0]);
@@ -547,8 +558,11 @@ const ElkRenderer: React.FC<ElkRendererProps> = ({
       return (
         <g key={edge.id}>
           <defs>
-            <marker id={markerId} markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto">
-              <path d="M0,0 L6,3 L0,6 Z" fill={edgeColor} />
+            <marker id={markerId} markerWidth="14" markerHeight="14" refX="12" refY="7" markerUnits="userSpaceOnUse" orient="auto">
+              <path d="M0,0 L14,7 L0,14 Z" fill={edgeColor} />
+            </marker>
+            <marker id={selectedMarkerId} markerWidth="14" markerHeight="14" refX="12" refY="7" markerUnits="userSpaceOnUse" orient="auto">
+              <path d="M0,0 L14,7 L0,14 Z" fill="#2563eb" />
             </marker>
           </defs>
           <path
@@ -586,6 +600,7 @@ const ElkRenderer: React.FC<ElkRendererProps> = ({
                 fill="none"
                 stroke="#2563eb"
                 strokeWidth={edge.isVector ? "6" : "4.5"}
+                markerEnd={`url(#${selectedMarkerId})`}
                 strokeLinejoin="round"
                 strokeLinecap="round"
                 opacity={1}
@@ -607,8 +622,11 @@ const ElkRenderer: React.FC<ElkRendererProps> = ({
     return (
       <g key={edge.id}>
         <defs>
-          <marker id={markerId} markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto">
-            <path d="M0,0 L6,3 L0,6 Z" fill={edgeColor} />
+          <marker id={markerId} markerWidth="14" markerHeight="14" refX="12" refY="7" markerUnits="userSpaceOnUse" orient="auto">
+            <path d="M0,0 L14,7 L0,14 Z" fill={edgeColor} />
+          </marker>
+          <marker id={selectedMarkerId} markerWidth="14" markerHeight="14" refX="12" refY="7" markerUnits="userSpaceOnUse" orient="auto">
+            <path d="M0,0 L14,7 L0,14 Z" fill="#2563eb" />
           </marker>
         </defs>
         {/* Main wire path */}
@@ -648,6 +666,7 @@ const ElkRenderer: React.FC<ElkRendererProps> = ({
               fill="none"
               stroke="#2563eb"
               strokeWidth={edge.isVector ? "6" : "4.5"}
+              markerEnd={`url(#${selectedMarkerId})`}
               strokeLinejoin="round"
               strokeLinecap="round"
               opacity={1}

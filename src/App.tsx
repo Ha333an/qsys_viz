@@ -213,6 +213,9 @@ const App: React.FC = () => {
         }
         return node;
       });
+      if (next.edges) {
+        next.edges = next.edges.map(edge => ({ ...edge, sections: undefined }));
+      }
       return next;
     });
   }, []);
