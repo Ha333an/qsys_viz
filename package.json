@@ -1,9 +1,9 @@
 {
   "name": "qsys-viz",
   "displayName": "Qsys Visualizer",
-  "description": "Visual Qsys Diagramming for VS Code",
+  "description": "Qsys Visualizer for Intel FPGA Platform Designer",
   "icon": "logo.png",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "publisher": "HassanEbrahimi",
   "repository": {
     "type": "git",
@@ -14,7 +14,7 @@
   },
   "main": "./out/extension.js",
   "activationEvents": [
-    "onCustomEditor:qsysExplorer.view"
+    "onCustomEditor:qsysViz.view"
   ],
   "scripts": {
     "vscode:prepublish": "npm run compile",
@@ -28,7 +28,7 @@
   "contributes": {
     "customEditors": [
       {
-        "viewType": "qsysExplorer.view",
+        "viewType": "qsysViz.view",
         "displayName": "Qsys Diagram",
         "selector": [
           {

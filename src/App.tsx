@@ -236,7 +236,7 @@ const App: React.FC = () => {
     if (!layoutedGraph) return;
 
     let xml = `<?xml version="1.0" encoding="UTF-8"?>
-<mxfile host="Electron" modified="${new Date().toISOString()}" agent="QsysExplorer" version="20.0.0">
+<mxfile host="Electron" modified="${new Date().toISOString()}" agent="qsysViz" version="20.0.0">
   <diagram id="diag_1" name="Qsys Design">
     <mxGraphModel dx="1000" dy="1000" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="827" pageHeight="1169">
       <root>
@@ -370,7 +370,7 @@ const App: React.FC = () => {
           <div className="bg-indigo-600 p-3 rounded-lg">
              <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" /></svg>
           </div>
-          <h1 className="text-3xl font-black text-slate-800 tracking-tight">Qsys Explorer</h1>
+          <h1 className="text-3xl font-black text-slate-800 tracking-tight">Qsys Visualizer</h1>
         </div>
 
         <div className="flex items-center gap-4">

@@ -11,7 +11,7 @@ class QsysEditorProvider implements vscode.CustomTextEditorProvider {
         const provider = new QsysEditorProvider(context);
         return vscode.window.registerCustomEditorProvider(QsysEditorProvider.viewType, provider);
     }
-    private static readonly viewType = 'qsysExplorer.view';
+    private static readonly viewType = 'qsysViz.view';
     constructor(private readonly context: vscode.ExtensionContext) { }
 
     public async resolveCustomTextEditor(
@@ -54,7 +54,7 @@ class QsysEditorProvider implements vscode.CustomTextEditorProvider {
             <head>
                 <meta charset="UTF-8">
                 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                <title>Qsys Explorer</title>
+                <title>Qsys Visualizer</title>
                 <script src="https://cdn.tailwindcss.com"></script>
                 <script src="https://cdn.jsdelivr.net/npm/elkjs@0.9.3/lib/elk.bundled.js"></script>
                 <script src="https://cdn.jsdelivr.net/npm/svg-pan-zoom@3.6.1/dist/svg-pan-zoom.min.js"></script>
