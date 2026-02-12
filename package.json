@@ -1,9 +1,13 @@
 {
-  "name": "qsys-explorer",
-  "displayName": "Qsys Explorer",
+  "name": "qsys-viz",
+  "displayName": "Qsys Vizualizer",
   "description": "Visual Qsys Diagramming for VS Code",
   "version": "1.0.0",
-  "publisher": "qsys-explorer",
+  "publisher": "qsys-viz",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Ha333an/qsys_viz.git"
+  },
   "engines": {
     "vscode": "^1.75.0"
   },
