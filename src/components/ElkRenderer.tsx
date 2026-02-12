@@ -166,6 +166,19 @@ const ElkRenderer: React.FC<ElkRendererProps> = ({
         ports.forEach((port, index) => {
           const pw = port.width || 0;
           const ph = port.height || 0;
+          const hasElkCoords = typeof port.x === 'number' && typeof port.y === 'number';
+
+          if (hasElkCoords) {
+            positions.set(port.id, {
+              x: nodeX + (port.x || 0) + pw / 2,
+              y: nodeY + (port.y || 0) + ph / 2,
+              side,
+              w: pw,
+              h: ph
+            });
+            return;
+          }
+
           const inset = 2;
           let adjustedX = 0;
           let adjustedY = 0;
@@ -410,6 +423,7 @@ const ElkRenderer: React.FC<ElkRendererProps> = ({
   const renderEdge = (edge: ElkEdge) => {
     const edgeColor = edge.meta?.['edge.color'] || '#475569';
     const markerId = `arrow-${edge.id}`;
+    const hasSections = !!(edge.sections && edge.sections.length > 0);
     
     const sourcePos = portPositions.get(edge.sources[0]);
     const targetPos = portPositions.get(edge.targets[0]);
@@ -516,35 +530,73 @@ const ElkRenderer: React.FC<ElkRendererProps> = ({
       return { path, junctions };
     };
     
-    if (!sourcePos || !targetPos) {
-      // Fallback to original sections if ports not found
+    if (hasSections) {
+      const sectionPath = edge.sections!
+        .map((section) => {
+          let d = `M ${section.startPoint.x} ${section.startPoint.y}`;
+          section.bendPoints?.forEach((bp: any) => {
+            d += ` L ${bp.x} ${bp.y}`;
+          });
+          d += ` L ${section.endPoint.x} ${section.endPoint.y}`;
+          return d;
+        })
+        .join(' ');
+
+      const isSelected = selectedEdgeId === edge.id;
+
       return (
-        <g key={edge.id} pointerEvents="none">
+        <g key={edge.id}>
           <defs>
             <marker id={markerId} markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto">
               <path d="M0,0 L6,3 L0,6 Z" fill={edgeColor} />
             </marker>
           </defs>
-          {edge.sections?.map((section, idx) => {
-            let d = `M ${section.startPoint.x} ${section.startPoint.y}`;
-            section.bendPoints?.forEach((bp: any) => {
-              d += ` L ${bp.x} ${bp.y}`;
-            });
-            d += ` L ${section.endPoint.x} ${section.endPoint.y}`;
-            return (
+          <path
+            d={sectionPath}
+            fill="none"
+            stroke={edgeColor}
+            strokeWidth={edge.isVector ? "3.5" : "2"}
+            markerEnd={`url(#${markerId})`}
+            strokeLinejoin="round"
+            opacity={isSelected ? 1 : 0.55}
+          />
+          <path
+            d={sectionPath}
+            fill="none"
+            stroke="transparent"
+            strokeWidth={edge.isVector ? "12" : "10"}
+            onClick={(e) => {
+              e.stopPropagation();
+              onSelectEdge(edge.id);
+            }}
+          />
+          {isSelected && (
+            <>
               <path
-                key={idx}
-                d={d}
+                d={sectionPath}
                 fill="none"
-                stroke={edgeColor}
-                strokeWidth={edge.isVector ? "3.5" : "2"}
-                markerEnd={`url(#${markerId})`}
+                stroke="#ffffff"
+                strokeWidth={edge.isVector ? "9" : "7"}
+                strokeLinejoin="round"
+                strokeLinecap="round"
+                opacity={0.95}
               />
-            );
-          })}
+              <path
+                d={sectionPath}
+                fill="none"
+                stroke="#2563eb"
+                strokeWidth={edge.isVector ? "6" : "4.5"}
+                strokeLinejoin="round"
+                strokeLinecap="round"
+                opacity={1}
+              />
+            </>
+          )}
         </g>
       );
     }
+
+    if (!sourcePos || !targetPos) return null;
     
     const sourceAnchor = getAnchor(sourcePos);
     const targetAnchor = getAnchor(targetPos);
@@ -567,7 +619,7 @@ const ElkRenderer: React.FC<ElkRendererProps> = ({
           strokeWidth={edge.isVector ? "3.5" : "2"}
           markerEnd={`url(#${markerId})`}
           strokeLinejoin="round"
-          opacity={isSelected ? 1 : 0.9}
+          opacity={isSelected ? 1 : 0.55}
         />
         {/* Hit area for selection */}
         <path
@@ -581,14 +633,26 @@ const ElkRenderer: React.FC<ElkRendererProps> = ({
           }}
         />
         {isSelected && (
-          <path
-            d={path}
-            fill="none"
-            stroke="#2563eb"
-            strokeWidth={edge.isVector ? "4.5" : "3"}
-            strokeLinejoin="round"
-            opacity={0.7}
-          />
+          <>
+            <path
+              d={path}
+              fill="none"
+              stroke="#ffffff"
+              strokeWidth={edge.isVector ? "9" : "7"}
+              strokeLinejoin="round"
+              strokeLinecap="round"
+              opacity={0.95}
+            />
+            <path
+              d={path}
+              fill="none"
+              stroke="#2563eb"
+              strokeWidth={edge.isVector ? "6" : "4.5"}
+              strokeLinejoin="round"
+              strokeLinecap="round"
+              opacity={1}
+            />
+          </>
         )}
         {/* Junction points (filled circles where wires branch) */}
         {junctions.map((j, idx) => (
