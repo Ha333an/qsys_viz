@@ -1,4 +1,4 @@
-# Qsys Explorer Extension Export
+# Qsys Extension for Vscode with Draw.io Export
 
 Qsys Explorer is a Visual Studio Code extension that visualizes QSYS system designs directly inside VS Code.
 
