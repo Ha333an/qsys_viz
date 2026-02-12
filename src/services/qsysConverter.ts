@@ -1,17 +1,7 @@
 
 import { ElkNode, ElkPort, ElkEdge } from '../types';
 
-export const CONNECTION_KINDS = {
-  MM: 'Avalon-MM',
-  ST: 'Avalon-ST',
-  CLOCK: 'Clock',
-  RESET: 'Reset',
-  CONDUIT: 'Conduit',
-  INTR: 'Interrupt',
-  OTHER: 'Other'
-} as const;
-
-export type ConnectionKind = typeof CONNECTION_KINDS[keyof typeof CONNECTION_KINDS];
+export type ConnectionKind = string;
 
 export const getKindColor = (kind: string): string => {
   const k = kind.toLowerCase();
@@ -24,15 +14,29 @@ export const getKindColor = (kind: string): string => {
   return '#475569';
 };
 
-export const mapQsysKindToInternal = (kind: string): ConnectionKind => {
-  const k = kind.toLowerCase();
-  if (k.includes('avalon_streaming') || k.includes('st')) return CONNECTION_KINDS.ST;
-  if (k.includes('avalon') || k.includes('mm')) return CONNECTION_KINDS.MM;
-  if (k.includes('clock')) return CONNECTION_KINDS.CLOCK;
-  if (k.includes('reset')) return CONNECTION_KINDS.RESET;
-  if (k.includes('conduit')) return CONNECTION_KINDS.CONDUIT;
-  if (k.includes('interrupt')) return CONNECTION_KINDS.INTR;
-  return CONNECTION_KINDS.OTHER;
+const normalizeType = (value?: string | null): string => {
+  const trimmed = value?.trim();
+  return trimmed && trimmed.length > 0 ? trimmed : 'unknown';
+};
+
+const resolveConnectionType = (
+  connectionKind: string | null,
+  startInterfaceType?: string,
+  endInterfaceType?: string
+): string => {
+  const startType = normalizeType(startInterfaceType);
+  const endType = normalizeType(endInterfaceType);
+
+  if (startType !== 'unknown' && endType !== 'unknown') {
+    if (startType.toLowerCase() === endType.toLowerCase()) {
+      return startType;
+    }
+    return `${startType} -> ${endType}`;
+  }
+
+  if (startType !== 'unknown') return startType;
+  if (endType !== 'unknown') return endType;
+  return normalizeType(connectionKind);
 };
 
 export function convertQsysToElk(xmlString: string): ElkNode {
@@ -54,8 +58,15 @@ export function convertQsysToElk(xmlString: string): ElkNode {
   const connections = xmlDoc.getElementsByTagName('connection');
   const interfaces = xmlDoc.getElementsByTagName('interface');
   const moduleMap = new Map<string, ElkNode>();
+  const interfaceTypeMap = new Map<string, string>();
   const connectedPortIds = new Set<string>();
   const unconnectedInterfacePorts: Array<{ portId: string; label: string; kind: ConnectionKind; color: string; dir: string }> = [];
+
+  Array.from(interfaces).forEach((intf) => {
+    const internal = intf.getAttribute('internal');
+    if (!internal) return;
+    interfaceTypeMap.set(internal, normalizeType(intf.getAttribute('type')));
+  });
 
   // 1. Process Modules
   Array.from(modules).forEach((mod) => {
@@ -95,9 +106,13 @@ export function convertQsysToElk(xmlString: string): ElkNode {
   Array.from(connections).forEach((conn, index) => {
     const startStr = conn.getAttribute('start') || '';
     const endStr = conn.getAttribute('end') || '';
-    const qsysKind = conn.getAttribute('kind') || 'unknown';
-    const internalKind = mapQsysKindToInternal(qsysKind);
-    const color = getKindColor(qsysKind);
+    const qsysKind = normalizeType(conn.getAttribute('kind'));
+    const resolvedType = resolveConnectionType(
+      conn.getAttribute('kind'),
+      interfaceTypeMap.get(startStr),
+      interfaceTypeMap.get(endStr)
+    );
+    const color = getKindColor(resolvedType);
 
     const [startMod, startIntf] = startStr.split('.');
     const [endMod, endIntf] = endStr.split('.');
@@ -122,7 +137,7 @@ export function convertQsysToElk(xmlString: string): ElkNode {
           meta: {
             'label': startIntf,
             'interface.color': color, 
-            'internalKind': internalKind 
+            'internalKind': resolvedType 
           }
         });
       }
@@ -136,7 +151,7 @@ export function convertQsysToElk(xmlString: string): ElkNode {
           meta: {
             'label': endIntf,
             'interface.color': color, 
-            'internalKind': internalKind 
+            'internalKind': resolvedType 
           }
         });
       }
@@ -145,11 +160,11 @@ export function convertQsysToElk(xmlString: string): ElkNode {
         id: `edge_${index}`,
         sources: [sourcePortId],
         targets: [targetPortId],
-        isVector: qsysKind.toLowerCase().includes('avalon'),
-        labels: [{ text: qsysKind }],
+        isVector: qsysKind.toLowerCase().includes('avalon') || resolvedType.toLowerCase().includes('axi'),
+        labels: [{ text: resolvedType }],
         meta: {
           'edge.color': color,
-          'edge.type': internalKind
+          'edge.type': resolvedType
         }
       });
     }
@@ -158,9 +173,9 @@ export function convertQsysToElk(xmlString: string): ElkNode {
   // 3. Process Interfaces to catch any ports not defined by connections
   Array.from(interfaces).forEach((intf) => {
     const internal = intf.getAttribute('internal') || '';
-    const qsysKind = intf.getAttribute('type') || 'unknown';
+    const qsysKind = normalizeType(intf.getAttribute('type'));
     const dir = intf.getAttribute('dir') || 'end';
-    const internalKind = mapQsysKindToInternal(qsysKind);
+    const internalKind = qsysKind;
     const color = getKindColor(qsysKind);
     
     const [modName, intfName] = internal.split('.');

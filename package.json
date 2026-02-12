@@ -1,9 +1,9 @@
 {
   "name": "qsys-viz",
-  "displayName": "Qsys Vizualizer",
+  "displayName": "Qsys Visualizer",
   "description": "Visual Qsys Diagramming for VS Code",
   "icon": "logo.png",
-  "version": "1.0.1",
+  "version": "1.0.5",
   "publisher": "HassanEbrahimi",
   "repository": {
     "type": "git",

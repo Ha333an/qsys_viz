@@ -1,7 +1,7 @@
 
 import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import { ElkNode, LayoutAlgorithm, LayoutDirection, LayoutOptions, RoutingStyle, ElkEdge } from './types';
-import { convertQsysToElk, CONNECTION_KINDS, ConnectionKind, getKindColor } from './services/qsysConverter';
+import { convertQsysToElk, getKindColor } from './services/qsysConverter';
 import ElkRenderer from './components/ElkRenderer';
 
 declare const ELK: any;
@@ -10,6 +10,15 @@ declare const JSZip: any;
 type PortSide = 'NORTH' | 'SOUTH' | 'EAST' | 'WEST' | 'AUTO';
 
 const App: React.FC = () => {
+  const buildVisibilityMap = useCallback((graph: ElkNode, previous?: Record<string, boolean>) => {
+    const kinds = Array.from(new Set((graph.edges || []).map(edge => String(edge.meta?.['edge.type'] || edge.labels?.[0]?.text || 'unknown'))));
+    const next: Record<string, boolean> = {};
+    kinds.forEach(kind => {
+      next[kind] = previous?.[kind] ?? true;
+    });
+    return next;
+  }, []);
+
   const [originalGraph, setOriginalGraph] = useState<ElkNode | null>(null);
   const [layoutedGraph, setLayoutedGraph] = useState<ElkNode | null>(null);
   const [loading, setLoading] = useState(false);
@@ -29,9 +38,7 @@ const App: React.FC = () => {
     routing: 'ORTHOGONAL'
   });
 
-  const [visibleKinds, setVisibleKinds] = useState<Record<string, boolean>>(
-    Object.values(CONNECTION_KINDS).reduce((acc: Record<string, boolean>, kind: string) => ({ ...acc, [kind]: true }), {})
-  );
+  const [visibleKinds, setVisibleKinds] = useState<Record<string, boolean>>({});
 
   const elk = useMemo(() => new ELK(), []);
   const vscodeApi = useMemo(() => {
@@ -58,7 +65,8 @@ const App: React.FC = () => {
 
       if (g.edges) {
         g.edges = g.edges.filter(edge => {
-          const isKindVisible = visibility[edge.meta?.['edge.type'] || ''];
+          const edgeType = String(edge.meta?.['edge.type'] || edge.labels?.[0]?.text || 'unknown');
+          const isKindVisible = visibility[edgeType] ?? true;
           if (!isKindVisible) return false;
           const sourceNodeId = edge.sources[0].split('.')[0];
           const targetNodeId = edge.targets[0].split('.')[0];
@@ -164,10 +172,12 @@ const App: React.FC = () => {
         }
         try {
           const graph = convertQsysToElk(message.text);
+          const nextVisibility = buildVisibilityMap(graph, visibleKinds);
           setOriginalGraph(graph);
+          setVisibleKinds(nextVisibility);
           setHiddenNodeIds(new Set());
           setPortOverrides({});
-          runLayout(graph, options, visibleKinds, showParameters, new Set(), {});
+          runLayout(graph, options, nextVisibility, showParameters, new Set(), {});
         } catch (err: any) {
           setError("Failed to parse VS Code document: " + err.message);
         }
@@ -176,7 +186,7 @@ const App: React.FC = () => {
 
     window.addEventListener('message', handleMessage);
     return () => window.removeEventListener('message', handleMessage);
-  }, [options, visibleKinds, showParameters, portOverrides, runLayout]);
+  }, [options, visibleKinds, showParameters, portOverrides, runLayout, buildVisibilityMap]);
 
     const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0];
@@ -192,10 +202,12 @@ const App: React.FC = () => {
           } else {
             graph = JSON.parse(content);
           }
+          const nextVisibility = buildVisibilityMap(graph, visibleKinds);
           setOriginalGraph(graph);
+          setVisibleKinds(nextVisibility);
           setHiddenNodeIds(new Set());
           setPortOverrides({});
-          runLayout(graph, options, visibleKinds, showParameters, new Set(), {});
+          runLayout(graph, options, nextVisibility, showParameters, new Set(), {});
         } catch (err: any) {
           alert("Error parsing file: " + err.message);
         }
@@ -310,6 +322,8 @@ const App: React.FC = () => {
     if (originalGraph) runLayout(originalGraph, options, newVisibility, showParameters, hiddenNodeIds, portOverrides);
   };
 
+  const visibleKindList = useMemo(() => Object.keys(visibleKinds).sort((a, b) => a.localeCompare(b)), [visibleKinds]);
+
   const toggleParameters = () => {
     const next = !showParameters;
     setShowParameters(next);
@@ -422,8 +436,8 @@ const App: React.FC = () => {
           <section className="flex-1">
             <h3 className="text-[15px] font-black text-slate-400 uppercase tracking-widest mb-6">Legend & Filters</h3>
             <div className="space-y-4">
-              {Object.entries(CONNECTION_KINDS).map(([key, label]: [string, string]) => (
-                <label key={key} className="flex items-center gap-4 p-3 rounded-lg hover:bg-slate-50 cursor-pointer group">
+              {visibleKindList.map((label) => (
+                <label key={label} className="flex items-center gap-4 p-3 rounded-lg hover:bg-slate-50 cursor-pointer group">
                   <input
                     type="checkbox"
                     checked={visibleKinds[label]}
@@ -434,6 +448,9 @@ const App: React.FC = () => {
                   <span className={`text-base font-bold ${visibleKinds[label] ? 'text-slate-700' : 'text-slate-400 line-through'}`}>{label}</span>
                 </label>
               ))}
+              {visibleKindList.length === 0 && (
+                <div className="text-sm text-slate-400 font-bold">No connection types detected yet.</div>
+              )}
             </div>
           </section>
 
