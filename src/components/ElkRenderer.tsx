@@ -80,6 +80,31 @@ const ElkRenderer: React.FC<ElkRendererProps> = ({
     };
   }, [graph]);
 
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || event.repeat) return;
+      if (event.key.toLowerCase() !== 'f') return;
+      if (event.ctrlKey || event.metaKey || event.altKey) return;
+
+      const target = event.target as HTMLElement | null;
+      if (target) {
+        const tagName = target.tagName;
+        if (target.isContentEditable || tagName === 'INPUT' || tagName === 'TEXTAREA' || tagName === 'SELECT') {
+          return;
+        }
+      }
+
+      if (panZoomRef.current) {
+        event.preventDefault();
+        panZoomRef.current.fit();
+        panZoomRef.current.center();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
   const getSVGCoords = (e: React.MouseEvent | MouseEvent) => {
     if (!svgRef.current || !viewportRef.current) return { x: 0, y: 0 };
     const svg = svgRef.current;

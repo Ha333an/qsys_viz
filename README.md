@@ -12,3 +12,16 @@ Follow these steps to generate your .vsix file:
 6. Run `npx vsce package` or `npm run package` to generate the final **.vsix** file.
 
 You can then install the .vsix in VS Code via "Extensions: Install from VSIX...".
+
+## Usage
+
+- Open any `.qsys` file in VS Code to launch the custom editor view.
+- Use the compact header controls to import a file (browser mode) or export the current layout to Draw.io.
+- Click a component or net to open the right-side inspector panel.
+- Drag components to manually reposition blocks.
+
+## Keyboard shortcuts
+
+- Press `F` to fit and center the drawing to the current viewport.
+
+> Note: The `F` shortcut is ignored while typing in inputs or other editable fields.

@@ -365,24 +365,18 @@ const App: React.FC = () => {
 
   return (
     <div className="flex flex-col h-screen overflow-hidden bg-slate-100 font-sans">
-      <header className="no-print bg-white border-b border-slate-200 px-8 py-5 flex items-center justify-between shadow-sm z-10">
-        <div className="flex items-center gap-4">
-          <div className="bg-indigo-600 p-3 rounded-lg">
-             <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" /></svg>
-          </div>
-          <h1 className="text-3xl font-black text-slate-800 tracking-tight">Qsys Visualizer</h1>
-        </div>
+      <header className="no-print bg-white border-b border-slate-200 px-4 py-2 flex items-center justify-end shadow-sm z-10">
 
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-2">
           {!isVsCode && (
             <>
-              <label className="flex items-center gap-3 text-lg font-bold text-slate-700 bg-slate-50 hover:bg-slate-100 border border-slate-200 px-6 py-3 rounded-lg cursor-pointer transition-all active:scale-95">
+              <label className="flex items-center gap-2 text-sm font-bold text-slate-700 bg-slate-50 hover:bg-slate-100 border border-slate-200 px-4 py-2 rounded-lg cursor-pointer transition-all active:scale-95">
                 Import Qsys
                 <input type="file" className="hidden" accept=".json,.qsys" onChange={handleFileUpload} />
               </label>
             </>
           )}
-          <button onClick={exportToDrawIo} disabled={!layoutedGraph} className="flex items-center gap-3 text-lg font-bold text-slate-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-6 py-3 rounded-lg shadow-sm transition-all active:scale-95">
+          <button onClick={exportToDrawIo} disabled={!layoutedGraph} className="flex items-center gap-2 text-sm font-bold text-slate-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-4 py-2 rounded-lg shadow-sm transition-all active:scale-95">
             Export Draw.io
           </button>
         </div>
@@ -491,33 +485,33 @@ const App: React.FC = () => {
 
           {/* Right Inspector Panel */}
           {selectedNode && (
-            <aside className="w-[400px] bg-white border-l border-slate-200 flex flex-col shadow-xl z-20 animate-in slide-in-from-right duration-300">
-              <div className="p-6 border-b border-slate-200 flex items-center justify-between bg-slate-50">
+            <aside className="w-[320px] bg-white border-l border-slate-200 flex flex-col shadow-xl z-20 animate-in slide-in-from-right duration-300">
+              <div className="p-4 border-b border-slate-200 flex items-center justify-between bg-slate-50">
                 <div className="overflow-hidden">
-                  <h3 className="text-xl font-black text-slate-800 truncate">{selectedNode.labels?.[0]?.text}</h3>
-                  <p className="text-sm text-slate-500 font-bold uppercase truncate">{selectedNode.meta?.kind}</p>
+                  <h3 className="text-lg font-black text-slate-800 truncate">{selectedNode.labels?.[0]?.text}</h3>
+                  <p className="text-xs text-slate-500 font-bold uppercase truncate">{selectedNode.meta?.kind}</p>
                 </div>
-                <button onClick={() => setSelectedNodeId(null)} className="p-2 hover:bg-slate-200 rounded-lg text-slate-400">
-                  <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
+                <button onClick={() => setSelectedNodeId(null)} className="p-1.5 hover:bg-slate-200 rounded-md text-slate-400">
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
                 </button>
               </div>
 
-              <div className="flex-1 overflow-y-auto p-6 space-y-8">
+              <div className="flex-1 overflow-y-auto p-4 space-y-5">
                 <section>
-                  <h4 className="text-[15px] font-black text-slate-400 uppercase tracking-widest mb-6 flex items-center gap-3">
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" /></svg>
+                  <h4 className="text-[13px] font-black text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" /></svg>
                     Interface Locations
                   </h4>
-                  <div className="space-y-6">
+                  <div className="space-y-3">
                     {selectedNode.ports?.map(port => (
-                      <div key={port.id} className="p-5 bg-slate-50 rounded-xl border border-slate-100">
-                        <div className="flex items-center justify-between mb-3">
-                          <span className="text-base font-black text-slate-700 truncate mr-3" title={port.meta?.label}>
+                      <div key={port.id} className="p-3 bg-slate-50 rounded-lg border border-slate-100">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-sm font-black text-slate-700 truncate mr-2" title={port.meta?.label}>
                             {port.meta?.label}
                           </span>
-                          <div className="w-3 h-3 rounded-full" style={{ backgroundColor: port.meta?.['interface.color'] }}></div>
+                          <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: port.meta?.['interface.color'] }}></div>
                         </div>
-                        <div className="grid grid-cols-5 gap-2">
+                        <div className="grid grid-cols-5 gap-1">
                           {['AUTO', 'NORTH', 'SOUTH', 'WEST', 'EAST'].map((side) => {
                             const currentSide = portOverrides[port.id] || (port.properties?.['org.eclipse.elk.port.side'] ?? 'AUTO');
                             const isSelected = currentSide === side;
@@ -525,7 +519,7 @@ const App: React.FC = () => {
                               <button
                                 key={side}
                                 onClick={() => setPortSide(port.id, side as PortSide)}
-                                className={`text-sm font-black py-2 rounded-lg transition-all border ${
+                                className={`text-xs font-black py-1.5 rounded-md transition-all border ${
                                   isSelected 
                                     ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' 
                                     : 'bg-white text-slate-500 border-slate-200 hover:border-indigo-300'
@@ -543,12 +537,12 @@ const App: React.FC = () => {
                 
                 {selectedNode.meta?.parameters && (
                   <section>
-                    <h4 className="text-[15px] font-black text-slate-400 uppercase tracking-widest mb-6">Parameters</h4>
-                    <div className="space-y-2">
+                    <h4 className="text-[13px] font-black text-slate-400 uppercase tracking-widest mb-4">Parameters</h4>
+                    <div className="space-y-1">
                       {(selectedNode.meta.parameters as any[]).map((p, i) => (
-                        <div key={i} className="flex flex-col gap-1 pb-2 border-b border-slate-50">
+                        <div key={i} className="flex flex-col gap-1 pb-1.5 border-b border-slate-50">
                           <span className="text-xs font-bold text-slate-400 truncate">{p.name}</span>
-                          <span className="text-sm font-mono font-medium text-slate-700 truncate bg-slate-50 p-2 rounded leading-tight">{p.value}</span>
+                          <span className="text-xs font-mono font-medium text-slate-700 truncate bg-slate-50 p-1.5 rounded leading-tight">{p.value}</span>
                         </div>
                       ))}
                     </div>
@@ -559,28 +553,28 @@ const App: React.FC = () => {
           )}
 
           {selectedEdge && !selectedNode && (
-            <aside className="w-[400px] bg-white border-l border-slate-200 flex flex-col shadow-xl z-20 animate-in slide-in-from-right duration-300">
-              <div className="p-6 border-b border-slate-200 flex items-center justify-between bg-slate-50">
+            <aside className="w-[320px] bg-white border-l border-slate-200 flex flex-col shadow-xl z-20 animate-in slide-in-from-right duration-300">
+              <div className="p-4 border-b border-slate-200 flex items-center justify-between bg-slate-50">
                 <div className="overflow-hidden">
-                  <h3 className="text-xl font-black text-slate-800 truncate">Net Details</h3>
-                  <p className="text-sm text-slate-500 font-bold uppercase truncate">{selectedEdge.meta?.['edge.type'] || selectedEdge.labels?.[0]?.text || 'Net'}</p>
+                  <h3 className="text-lg font-black text-slate-800 truncate">Net Details</h3>
+                  <p className="text-xs text-slate-500 font-bold uppercase truncate">{selectedEdge.meta?.['edge.type'] || selectedEdge.labels?.[0]?.text || 'Net'}</p>
                 </div>
-                <button onClick={() => setSelectedEdgeId(null)} className="p-2 hover:bg-slate-200 rounded-lg text-slate-400">
-                  <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
+                <button onClick={() => setSelectedEdgeId(null)} className="p-1.5 hover:bg-slate-200 rounded-md text-slate-400">
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
                 </button>
               </div>
 
-              <div className="flex-1 overflow-y-auto p-6 space-y-6">
-                <section className="p-5 bg-slate-50 rounded-xl border border-slate-100">
-                  <h4 className="text-[15px] font-black text-slate-400 uppercase tracking-widest mb-4">Type</h4>
+              <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                <section className="p-3 bg-slate-50 rounded-lg border border-slate-100">
+                  <h4 className="text-[13px] font-black text-slate-400 uppercase tracking-widest mb-3">Type</h4>
                   <div className="flex items-center gap-3">
                     <div className="w-4 h-4 rounded-full" style={{ backgroundColor: selectedEdge.meta?.['edge.color'] || '#475569' }}></div>
-                    <span className="text-base font-black text-slate-700">{selectedEdge.meta?.['edge.type'] || selectedEdge.labels?.[0]?.text || 'Unknown'}</span>
+                    <span className="text-sm font-black text-slate-700">{selectedEdge.meta?.['edge.type'] || selectedEdge.labels?.[0]?.text || 'Unknown'}</span>
                   </div>
                 </section>
 
-                <section className="p-5 bg-slate-50 rounded-xl border border-slate-100">
-                  <h4 className="text-[15px] font-black text-slate-400 uppercase tracking-widest mb-4">Endpoints</h4>
+                <section className="p-3 bg-slate-50 rounded-lg border border-slate-100">
+                  <h4 className="text-[13px] font-black text-slate-400 uppercase tracking-widest mb-3">Endpoints</h4>
                   <div className="space-y-4">
                     {(() => {
                       const src = resolvePortLabel(selectedEdge.sources[0]);
@@ -589,12 +583,12 @@ const App: React.FC = () => {
                         <>
                           <div>
                             <div className="text-xs font-bold text-slate-400 uppercase">Source</div>
-                            <div className="text-base font-black text-slate-700">{src.nodeName}</div>
+                            <div className="text-sm font-black text-slate-700">{src.nodeName}</div>
                             <div className="text-sm text-slate-500">{src.portLabel}</div>
                           </div>
                           <div>
                             <div className="text-xs font-bold text-slate-400 uppercase">Destination</div>
-                            <div className="text-base font-black text-slate-700">{dst.nodeName}</div>
+                            <div className="text-sm font-black text-slate-700">{dst.nodeName}</div>
                             <div className="text-sm text-slate-500">{dst.portLabel}</div>
                           </div>
                         </>
@@ -603,9 +597,9 @@ const App: React.FC = () => {
                   </div>
                 </section>
 
-                <section className="p-5 bg-slate-50 rounded-xl border border-slate-100">
-                  <h4 className="text-[15px] font-black text-slate-400 uppercase tracking-widest mb-4">Data Width</h4>
-                  <div className="text-base font-black text-slate-700">
+                <section className="p-3 bg-slate-50 rounded-lg border border-slate-100">
+                  <h4 className="text-[13px] font-black text-slate-400 uppercase tracking-widest mb-3">Data Width</h4>
+                  <div className="text-sm font-black text-slate-700">
                     {selectedEdge.meta?.['data.width'] || selectedEdge.meta?.['width'] || selectedEdge.meta?.['edge.width'] || 'Unknown'}
                   </div>
                 </section>

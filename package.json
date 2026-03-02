@@ -3,7 +3,7 @@
   "displayName": "Qsys Visualizer",
   "description": "Qsys Visualizer for Intel FPGA Platform Designer",
   "icon": "logo.png",
-  "version": "1.0.6",
+  "version": "1.0.7",
   "publisher": "HassanEbrahimi",
   "repository": {
     "type": "git",
