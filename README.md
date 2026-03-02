@@ -13,12 +13,24 @@ Follow these steps to generate your .vsix file:
 
 You can then install the .vsix in VS Code via "Extensions: Install from VSIX...".
 
+## What's New (v1.0.8)
+
+- Compact, flatter UI for better canvas visibility.
+- Left settings panel now auto-hides after startup and can be revealed by hovering the left edge.
+- Right inspector panel is compact and auto-dismisses after a short timeout.
+- Address Map moved to a dedicated floating panel for wider table viewing.
+- Address Map CSV export button added.
+- Improved address extraction from `.qsys` connections (`base` / inferred `end` / range).
+- Added `F` keyboard shortcut to fit and center the diagram.
+
 ## Usage
 
 - Open any `.qsys` file in VS Code to launch the custom editor view.
 - Use the compact header controls to import a file (browser mode) or export the current layout to Draw.io.
 - Click a component or net to open the right-side inspector panel.
 - Drag components to manually reposition blocks.
+- Open Address Map with the bottom-left `Address Map` button to inspect master/slave ranges.
+- Export table data with `Export CSV` inside the Address Map panel.
 
 ## Keyboard shortcuts
 

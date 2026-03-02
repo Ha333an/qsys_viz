@@ -39,6 +39,47 @@ const resolveConnectionType = (
   return normalizeType(connectionKind);
 };
 
+const parseAddressNumber = (value?: string | null): number | null => {
+  if (!value) return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+
+  const parsed = trimmed.toLowerCase().startsWith('0x')
+    ? Number.parseInt(trimmed, 16)
+    : Number.parseInt(trimmed, 10);
+
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
+const formatHex = (value: number): string => `0x${value.toString(16)}`;
+
+const getInterfaceAddrWidth = (
+  moduleParams: Map<string, string> | undefined,
+  interfaceName: string
+): number | null => {
+  if (!moduleParams) return null;
+
+  const key = interfaceName.toUpperCase().replace(/[^A-Z0-9]/g, '_');
+  const candidates = [
+    `${key}_ADDR_WIDTH`,
+    `${key}_ADDRESS_WIDTH`,
+    `C_${key}_AXI_ADDR_WIDTH`,
+    `C_${key}_ADDR_WIDTH`,
+    `${key}ADDR_WIDTH`,
+  ];
+
+  for (const candidate of candidates) {
+    const value = moduleParams.get(candidate);
+    if (!value) continue;
+    const parsed = Number.parseInt(value, 10);
+    if (Number.isFinite(parsed) && parsed > 0 && parsed <= 52) {
+      return parsed;
+    }
+  }
+
+  return null;
+};
+
 export function convertQsysToElk(xmlString: string): ElkNode {
   const parser = new DOMParser();
   const xmlDoc = parser.parseFromString(xmlString, "text/xml");
@@ -58,6 +99,7 @@ export function convertQsysToElk(xmlString: string): ElkNode {
   const connections = xmlDoc.getElementsByTagName('connection');
   const interfaces = xmlDoc.getElementsByTagName('interface');
   const moduleMap = new Map<string, ElkNode>();
+  const moduleParamMap = new Map<string, Map<string, string>>();
   const interfaceTypeMap = new Map<string, string>();
   const connectedPortIds = new Set<string>();
   const unconnectedInterfacePorts: Array<{ portId: string; label: string; kind: ConnectionKind; color: string; dir: string }> = [];
@@ -74,12 +116,14 @@ export function convertQsysToElk(xmlString: string): ElkNode {
     const kind = mod.getAttribute('kind') || 'component';
     
     const params: {name: string, value: string}[] = [];
+    const paramMap = new Map<string, string>();
     const paramTags = mod.getElementsByTagName('parameter');
     Array.from(paramTags).forEach(p => {
       const pName = p.getAttribute('name');
       const pValue = p.getAttribute('value');
       if (pName && pValue) {
         params.push({ name: pName, value: pValue });
+        paramMap.set(pName.toUpperCase(), pValue);
       }
     });
 
@@ -99,6 +143,7 @@ export function convertQsysToElk(xmlString: string): ElkNode {
       }
     };
     moduleMap.set(name, node);
+    moduleParamMap.set(name, paramMap);
     rootNode.children?.push(node);
   });
 
@@ -123,6 +168,33 @@ export function convertQsysToElk(xmlString: string): ElkNode {
     const targetNode = moduleMap.get(endMod);
 
     if (sourceNode && targetNode) {
+      const connectionParams = new Map<string, string>();
+      Array.from(conn.getElementsByTagName('parameter')).forEach((p) => {
+        const name = p.getAttribute('name');
+        const value = p.getAttribute('value');
+        if (name && value) {
+          connectionParams.set(name, value);
+        }
+      });
+
+      const baseValue = connectionParams.get('baseAddress') || connectionParams.get('base');
+      const explicitEndValue = connectionParams.get('endAddress') || connectionParams.get('end');
+      const baseAddress = parseAddressNumber(baseValue);
+      const explicitEndAddress = parseAddressNumber(explicitEndValue);
+
+      const targetParams = moduleParamMap.get(endMod);
+      const inferredAddrWidth = getInterfaceAddrWidth(targetParams, endIntf || '');
+      const inferredEndAddress =
+        baseAddress !== null && inferredAddrWidth !== null
+          ? baseAddress + Math.pow(2, inferredAddrWidth) - 1
+          : null;
+      const endAddress = explicitEndAddress ?? inferredEndAddress;
+
+      const addressRange =
+        baseAddress !== null && endAddress !== null
+          ? `${formatHex(baseAddress)} - ${formatHex(endAddress)}`
+          : null;
+
       const sourcePortId = `${startMod}.${startIntf}`;
       const targetPortId = `${endMod}.${endIntf}`;
       connectedPortIds.add(sourcePortId);
@@ -164,7 +236,13 @@ export function convertQsysToElk(xmlString: string): ElkNode {
         labels: [{ text: resolvedType }],
         meta: {
           'edge.color': color,
-          'edge.type': resolvedType
+          'edge.type': resolvedType,
+          'connection.kind': qsysKind,
+          'connection.start': startStr,
+          'connection.end': endStr,
+          'address.base': baseAddress !== null ? formatHex(baseAddress) : null,
+          'address.end': endAddress !== null ? formatHex(endAddress) : null,
+          'address.range': addressRange
         }
       });
     }

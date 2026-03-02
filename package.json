@@ -3,7 +3,7 @@
   "displayName": "Qsys Visualizer",
   "description": "Qsys Visualizer for Intel FPGA Platform Designer",
   "icon": "logo.png",
-  "version": "1.0.7",
+  "version": "1.0.8",
   "publisher": "HassanEbrahimi",
   "repository": {
     "type": "git",
@@ -13,9 +13,6 @@
     "vscode": "^1.75.0"
   },
   "main": "./out/extension.js",
-  "activationEvents": [
-    "onCustomEditor:qsysViz.view"
-  ],
   "scripts": {
     "vscode:prepublish": "npm run compile",
     "compile": "npm run bundle && tsc -p ./",
