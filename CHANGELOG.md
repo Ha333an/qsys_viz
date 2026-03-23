@@ -2,6 +2,20 @@
 
 All notable changes to this project are documented in this file.
 
+## [1.1.0] - 2026-03-23
+
+### Added
+- Address Map is now rendered as an expanded overlay (full-screen) in map mode.
+- Address Map overlay includes full table view with maximum height and scroll.
+- Auto-hide left/right panel when Address Map is open.
+
+### Changed
+- Address Map table uses higher contrast header and row styling for readability.
+- Address Map table scroll height raised to `calc(100vh - 10rem)`.
+
+### Fixed
+- Address Map toggle now closes side panels and ensures the sidebars are hidden.
+
 ## [1.0.9] - 2026-03-23
 
 ### Added

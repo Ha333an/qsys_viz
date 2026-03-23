@@ -508,10 +508,10 @@ const App: React.FC = () => {
   }, [layoutedGraph]);
 
   const renderAddressMapSection = () => (
-    <section className="p-3 bg-slate-50 rounded-lg border border-slate-100">
+    <section className="p-3 bg-white rounded-lg border border-slate-300 shadow-sm">
       <div className="flex items-center justify-between mb-2">
-        <h4 className="text-[12px] font-black text-slate-400 uppercase tracking-widest">Address Map</h4>
-        <button onClick={() => setAddressMapVisible(false)} className="text-xs font-black text-slate-500 hover:text-slate-700">Close</button>
+        <h4 className="text-[12px] font-black text-slate-700 uppercase tracking-widest">Address Map</h4>
+        <button onClick={() => setAddressMapVisible(false)} className="text-xs font-black text-slate-700 hover:text-slate-900">Close</button>
       </div>
       <button
         onClick={exportAddressMapCsv}
@@ -521,22 +521,22 @@ const App: React.FC = () => {
         Export CSV
       </button>
       {addressMap.masters.length > 0 && addressMap.slaves.length > 0 ? (
-        <div className="overflow-auto max-h-64">
+        <div className="overflow-auto max-h-[calc(100vh-10rem)]">
           <table className="w-full text-xs border-collapse">
             <thead>
               <tr>
-                <th className="border border-slate-200 bg-slate-100 p-1 text-left">Slave / Master</th>
+                <th className="border border-slate-300 bg-slate-800 text-white p-2 text-left">Slave / Master</th>
                 {addressMap.masters.map(master => (
-                  <th key={master} className="border border-slate-200 bg-slate-100 p-1 text-left">{master}</th>
+                  <th key={master} className="border border-slate-300 bg-slate-800 text-white p-2 text-left">{master}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {addressMap.slaves.map(slave => (
-                <tr key={slave} className="odd:bg-white even:bg-slate-50/40">
-                  <td className="border border-slate-200 p-1">{slave}</td>
+                <tr key={slave} className="odd:bg-white even:bg-slate-100">
+                  <td className="border border-slate-300 p-2 text-slate-700 font-semibold">{slave}</td>
                   {addressMap.masters.map(master => (
-                    <td key={`${slave}:${master}`} className="border border-slate-200 p-1">{addressMap.matrix[slave]?.[master] || ''}</td>
+                    <td key={`${slave}:${master}`} className="border border-slate-300 p-2 text-slate-700">{addressMap.matrix[slave]?.[master] || '-'}</td>
                   ))}
                 </tr>
               ))}
@@ -565,7 +565,7 @@ const App: React.FC = () => {
           <button onClick={exportToDrawIo} disabled={!layoutedGraph} className="flex items-center gap-2 text-sm font-bold text-slate-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-4 py-2 rounded-lg shadow-sm transition-all active:scale-95">
             Export Draw.io
           </button>
-          <button onClick={() => setAddressMapVisible(v => !v)} disabled={!layoutedGraph} className="flex items-center gap-2 text-sm font-bold text-slate-700 bg-sky-50 hover:bg-sky-100 border border-sky-200 px-4 py-2 rounded-lg shadow-sm transition-all active:scale-95">
+          <button onClick={() => setAddressMapVisible(v => { const next = !v; if (next) setSidebarVisible(false); return next; })} disabled={!layoutedGraph} className="flex items-center gap-2 text-sm font-bold text-slate-700 bg-sky-50 hover:bg-sky-100 border border-sky-200 px-4 py-2 rounded-lg shadow-sm transition-all active:scale-95">
             {addressMapVisible ? 'Hide Address Map' : 'Address Map'}
           </button>
           <button onClick={() => setSidebarVisible(prev => !prev)} className="flex items-center gap-2 text-sm font-bold text-slate-700 bg-slate-50 hover:bg-slate-100 border border-slate-200 px-4 py-2 rounded-lg shadow-sm transition-all active:scale-95">
@@ -576,9 +576,10 @@ const App: React.FC = () => {
 
       <div className="flex flex-1 overflow-hidden relative">
         {/* Left Sidebar */}
-        <aside 
-          className={`no-print w-80 bg-white border-r border-slate-200 p-4 flex flex-col gap-4 shadow-lg overflow-y-auto absolute left-0 top-0 h-full z-50 transition-transform duration-300 ease-in-out ${sidebarVisible ? 'translate-x-0' : '-translate-x-full'}`}
-        >
+        {!addressMapVisible && (
+          <aside 
+            className={`no-print w-80 bg-white border-r border-slate-200 p-4 flex flex-col gap-4 shadow-lg overflow-y-auto absolute left-0 top-0 h-full z-50 transition-transform duration-300 ease-in-out ${sidebarVisible ? 'translate-x-0' : '-translate-x-full'}`}
+          >
           <section>
             <h3 className="text-[13px] font-black text-slate-400 uppercase tracking-widest mb-3">Layout Options</h3>
             <div className="space-y-3">
@@ -655,6 +656,7 @@ const App: React.FC = () => {
             </section>
           )}
         </aside>
+        )}
 
         {/* Main Workspace */}
         <main className="flex-1 relative bg-slate-50 overflow-hidden flex">
@@ -680,7 +682,7 @@ const App: React.FC = () => {
           </div>
 
           {/* Right Inspector Panel */}
-          {selectedNode && (
+          {selectedNode && !addressMapVisible && (
             <aside className="bg-white border-l border-slate-200 flex flex-col shadow-xl z-20 animate-in slide-in-from-right duration-300 relative" style={{ width: sidebarWidth }}>
               <div
                 className="absolute left-0 top-0 h-full w-0.5 cursor-col-resize bg-slate-300 hover:bg-slate-400"
@@ -748,12 +750,11 @@ const App: React.FC = () => {
                     </div>
                   </section>
                 )}
-                {addressMapVisible && renderAddressMapSection()}
               </div>
             </aside>
           )}
 
-          {selectedEdge && !selectedNode && (
+          {selectedEdge && !selectedNode && !addressMapVisible && (
             <aside className="bg-white border-l border-slate-200 flex flex-col shadow-xl z-20 animate-in slide-in-from-right duration-300 relative" style={{ width: sidebarWidth }}>
               <div
                 className="absolute left-0 top-0 h-full w-0.5 cursor-col-resize bg-slate-300 hover:bg-slate-400"
@@ -808,12 +809,21 @@ const App: React.FC = () => {
                     {selectedEdge.meta?.['data.width'] || selectedEdge.meta?.['width'] || selectedEdge.meta?.['edge.width'] || 'Unknown'}
                   </div>
                 </section>
-                {addressMapVisible && renderAddressMapSection()}
               </div>
             </aside>
           )}
 
-          {!selectedNode && !selectedEdge && addressMapVisible && (
+          {addressMapVisible && (
+            <section className="no-print absolute inset-0 z-40 bg-white overflow-hidden p-2">
+              <div className="h-[calc(100vh-1rem)] max-w-[100%] mx-auto">
+                <div className="h-full w-full overflow-auto">
+                  {renderAddressMapSection()}
+                </div>
+              </div>
+            </section>
+          )}
+
+          {loading && (
             <aside className="bg-white border-l border-slate-200 flex flex-col shadow-xl z-20 animate-in slide-in-from-right duration-300 relative" style={{ width: sidebarWidth }}>
               <div
                 className="absolute left-0 top-0 h-full w-0.5 cursor-col-resize bg-slate-300 hover:bg-slate-400"

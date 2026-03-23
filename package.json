@@ -1,9 +1,9 @@
 {
-  "name": "qsys-viz",
-  "displayName": "Qsys Visualizer",
-  "description": "Qsys Visualizer for Intel FPGA Platform Designer",
+  "name": "quartus-qsys-viz",
+  "displayName": "Quartus Qsys Visualizer",
+  "description": "Quartus Qsys Visualizer for Intel FPGA Platform Designer",
   "icon": "logo.png",
-  "version": "1.0.9",
+  "version": "1.1.0",
   "publisher": "HassanEbrahimi",
   "repository": {
     "type": "git",
