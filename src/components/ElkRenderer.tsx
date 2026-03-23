@@ -64,6 +64,8 @@ const ElkRenderer: React.FC<ElkRendererProps> = ({
               minZoom: 0.01,
               maxZoom: 100,
               mouseWheelZoomEnabled: true,
+              // Make mouse-wheel zoom coarser / faster
+              zoomScaleSensitivity: 2,
               viewportSelector: '.svg-pan-zoom_viewport'
             });
           }
@@ -256,23 +258,83 @@ const ElkRenderer: React.FC<ElkRendererProps> = ({
     return groups;
   }, [graph]);
 
-  // Calculate wire channels (vertical routing lanes) to avoid overlaps
+  // Calculate per-edge lateral offset so parallel edges between the same
+  // node-pair are visually separated (each net type gets its own lane).
+  // We group by SOURCE-NODE + TARGET-NODE (not port positions) because all
+  // ports on the same node share the same node-X, making naive Y-band
+  // grouping produce all-zero offsets → completely overlapping wires.
   const wireChannels = useMemo(() => {
     const channels = new Map<string, number>();
-    let channelOffset = 0;
-    const channelSpacing = 15;
-    
+    const channelSpacing = 30; // px between adjacent parallel nets (pair-level)
+    const fanoutSpacing = 14;  // small local spread for fan-out at source
+
+    // 1) Pair-level grouping (inter-node corridor lanes)
+    const pairGroups = new Map<string, ElkEdge[]>();
     graph?.edges?.forEach(edge => {
-      const sourcePos = portPositions.get(edge.sources[0]);
-      const targetPos = portPositions.get(edge.targets[0]);
-      if (sourcePos && targetPos) {
-        // Assign unique channel for each edge to avoid overlaps
-        channels.set(edge.id, channelOffset);
-        channelOffset = (channelOffset + channelSpacing) % 60;
-      }
+      const srcNode = edge.sources[0].split('.')[0];
+      const tgtNode = edge.targets[0].split('.')[0];
+      const pairKey = [srcNode, tgtNode].sort().join('||');
+      if (!pairGroups.has(pairKey)) pairGroups.set(pairKey, []);
+      pairGroups.get(pairKey)!.push(edge);
     });
+
+    const pairOffsets = new Map<string, number>();
+    pairGroups.forEach((edges, pairKey) => {
+      const count = edges.length;
+      const sorted = [...edges].sort((a, b) => {
+        const ya = portPositions.get(a.sources[0])?.y ?? 0;
+        const yb = portPositions.get(b.sources[0])?.y ?? 0;
+        return ya - yb;
+      });
+      sorted.forEach((edge, i) => {
+        const offset = (i - (count - 1) / 2) * channelSpacing;
+        pairOffsets.set(edge.id, offset);
+      });
+    });
+
+    // 2) Fan-out grouping at source port to separate siblings near the node
+    const fanoutGroups = new Map<string, ElkEdge[]>();
+    graph?.edges?.forEach(edge => {
+      const sourcePort = edge.sources[0];
+      if (!fanoutGroups.has(sourcePort)) fanoutGroups.set(sourcePort, []);
+      fanoutGroups.get(sourcePort)!.push(edge);
+    });
+
+    const fanoutOffsets = new Map<string, number>();
+    fanoutGroups.forEach(edges => {
+      const count = edges.length;
+      if (count <= 1) return;
+      const sorted = [...edges].sort((a, b) => {
+        const ta = portPositions.get(a.targets[0])?.y ?? 0;
+        const tb = portPositions.get(b.targets[0])?.y ?? 0;
+        return ta - tb;
+      });
+      sorted.forEach((edge, i) => {
+        const offset = (i - (count - 1) / 2) * fanoutSpacing;
+        fanoutOffsets.set(edge.id, offset);
+      });
+    });
+
+    // Combine pair and fanout offsets for final channel offset
+    graph?.edges?.forEach(edge => {
+      const p = pairOffsets.get(edge.id) ?? 0;
+      const f = fanoutOffsets.get(edge.id) ?? 0;
+      channels.set(edge.id, p + f);
+    });
+
     return channels;
   }, [graph, portPositions]);
+
+  // Node bounding-box obstacles (with margin) used by the fallback router
+  const nodeObstacles = useMemo(() => {
+    const margin = 14;
+    return (graph?.children || []).map(node => ({
+      x1: (node.x || 0) - margin,
+      y1: (node.y || 0) - margin,
+      x2: (node.x || 0) + (node.width  || 0) + margin,
+      y2: (node.y || 0) + (node.height || 0) + margin,
+    }));
+  }, [graph]);
 
   if (!graph) {
     return (
@@ -477,95 +539,119 @@ const ElkRenderer: React.FC<ElkRendererProps> = ({
     // Get channel offset for this edge
     const channelOffset = wireChannels.get(edge.id) || 0;
     
-    // Generate schematic-style orthogonal path with proper routing
+    // Generate schematic-style orthogonal path with obstacle avoidance and
+    // per-edge lane separation.
+    //
+    // Every independent edge between the same source→target node pair receives
+    // a unique channelOffset (computed in wireChannels).  That offset is used
+    // as the BASE for the routing search, so parallel nets always land in
+    // different columns/rows of the inter-node corridor.
+    //
+    // Search order:
+    //   1. H-V-H  with midX = midpoint + channelOffset  (+ small sweep if blocked)
+    //   2. V-H-V  with midY = midpoint + channelOffset
+    //   3. Wide box-detour for retrograde / feedback edges
+    //   4. Unchecked fallback
     const createSchematicPath = (
       src: { x: number; y: number; side: string },
       tgt: { x: number; y: number; side: string }
     ): { path: string; junctions: { x: number; y: number }[] } => {
       const baseOffset = 40;
       const junctions: { x: number; y: number }[] = [];
-      
-      // Calculate exit point from source
+
+      // Exit stub from source
       let sx = src.x, sy = src.y;
-      if (src.side === 'EAST') sx += baseOffset;
-      else if (src.side === 'WEST') sx -= baseOffset;
+      if      (src.side === 'EAST')  sx += baseOffset;
+      else if (src.side === 'WEST')  sx -= baseOffset;
       else if (src.side === 'NORTH') sy -= baseOffset;
       else if (src.side === 'SOUTH') sy += baseOffset;
-      
-      // Calculate entry point to target
+
+      // Entry stub to target
       let tx = tgt.x, ty = tgt.y;
-      if (tgt.side === 'EAST') tx += baseOffset;
-      else if (tgt.side === 'WEST') tx -= baseOffset;
+      if      (tgt.side === 'EAST')  tx += baseOffset;
+      else if (tgt.side === 'WEST')  tx -= baseOffset;
       else if (tgt.side === 'NORTH') ty -= baseOffset;
       else if (tgt.side === 'SOUTH') ty += baseOffset;
-      
-      let path = `M ${src.x} ${src.y} L ${sx} ${sy}`;
-      
-      // Add junction at the first bend point if fan-out exists
+
       if (hasFanOut && edgeIndex === 0) {
         junctions.push({ x: sx, y: sy });
       }
-      
-      // Smart routing based on relative positions
-      const dx = tx - sx;
-      const dy = ty - sy;
-      
-      if (src.side === 'EAST' && tgt.side === 'WEST') {
-        // Standard left-to-right connection
-        if (dx > 0) {
-          // Direct path with single vertical segment
-          const midX = sx + dx / 2 + channelOffset;
-          path += ` L ${midX} ${sy}`;
-          path += ` L ${midX} ${ty}`;
-          // Add junction if lines would cross
-          if (hasFanOut) {
-            junctions.push({ x: midX, y: sy });
-          }
-        } else {
-          // Need to go around - source is to the right of target
-          const loopOffset = 60 + channelOffset;
-          path += ` L ${sx + loopOffset} ${sy}`;
-          const midY = (sy + ty) / 2;
-          path += ` L ${sx + loopOffset} ${midY}`;
-          path += ` L ${tx - loopOffset} ${midY}`;
-          path += ` L ${tx - loopOffset} ${ty}`;
-        }
-      } else if (src.side === 'WEST' && tgt.side === 'EAST') {
-        // Right-to-left connection
-        const midX = sx + dx / 2 - channelOffset;
-        path += ` L ${midX} ${sy}`;
-        path += ` L ${midX} ${ty}`;
-      } else if (src.side === 'SOUTH' && tgt.side === 'NORTH') {
-        // Top-to-bottom connection
-        const midY = sy + dy / 2 + channelOffset;
-        path += ` L ${sx} ${midY}`;
-        path += ` L ${tx} ${midY}`;
-      } else if (src.side === 'NORTH' && tgt.side === 'SOUTH') {
-        // Bottom-to-top connection
-        const midY = sy + dy / 2 - channelOffset;
-        path += ` L ${sx} ${midY}`;
-        path += ` L ${tx} ${midY}`;
-      } else {
-        // Mixed sides - use L-shaped or Z-shaped routing
-        if (Math.abs(dx) > Math.abs(dy)) {
-          // Horizontal dominant
-          const midX = sx + dx / 2 + channelOffset;
-          path += ` L ${midX} ${sy}`;
-          path += ` L ${midX} ${ty}`;
-        } else {
-          // Vertical dominant
-          const midY = sy + dy / 2 + channelOffset;
-          path += ` L ${sx} ${midY}`;
-          path += ` L ${tx} ${midY}`;
+
+      // ── Obstacle helpers ─────────────────────────────────────────────────
+      const segIntersectsRect = (
+        v: {x:number;y:number}, w: {x:number;y:number},
+        r: {x1:number;y1:number;x2:number;y2:number}
+      ): boolean => {
+        if (v.x >= r.x1 && v.x <= r.x2 && v.y >= r.y1 && v.y <= r.y2) return true;
+        if (w.x >= r.x1 && w.x <= r.x2 && w.y >= r.y1 && w.y <= r.y2) return true;
+        const cross = (p1:any,p2:any,p3:any,p4:any) => {
+          const o = (a:any,b:any,c:any) => (b.x-a.x)*(c.y-a.y)-(b.y-a.y)*(c.x-a.x);
+          return o(p1,p2,p3)*o(p1,p2,p4)<0 && o(p3,p4,p1)*o(p3,p4,p2)<0;
+        };
+        const {x1,y1,x2,y2} = r;
+        return cross(v,w,{x:x1,y:y1},{x:x2,y:y1})
+            || cross(v,w,{x:x2,y:y1},{x:x2,y:y2})
+            || cross(v,w,{x:x2,y:y2},{x:x1,y:y2})
+            || cross(v,w,{x:x1,y:y2},{x:x1,y:y1});
+      };
+
+      const A = {x: sx, y: sy};
+      const B = {x: tx, y: ty};
+
+      const is3SegClear = (m1: {x:number;y:number}, m2: {x:number;y:number}) =>
+        !nodeObstacles.some(r =>
+          segIntersectsRect(A, m1, r) || segIntersectsRect(m1, m2, r) || segIntersectsRect(m2, B, r)
+        );
+
+      // ── Routing search ────────────────────────────────────────────────────
+      // Fine search offsets around the preferred column (step = 20 px).
+      // The first candidate IS the channelOffset itself, followed by small
+      // perturbations in case that column is blocked by a node.
+      const step = 20;
+      const fineShifts = [0, 1,-1, 2,-2, 3,-3, 5,-5, 8,-8, 12,-12, 18,-18, 25,-25, 35,-35];
+
+      // 1. H-V-H: preferred midX = (sx+tx)/2 + channelOffset
+      //    Each edge in a group has a distinct channelOffset → distinct column.
+      const baseMidX = (sx + tx) / 2 + channelOffset;
+      for (const s of fineShifts) {
+        const midX = baseMidX + s * step;
+        if (is3SegClear({x: midX, y: sy}, {x: midX, y: ty})) {
+          return {
+            path: `M ${src.x} ${src.y} L ${sx} ${sy} L ${midX} ${sy} L ${midX} ${ty} L ${tx} ${ty} L ${tgt.x} ${tgt.y}`,
+            junctions,
+          };
         }
       }
-      
-      path += ` L ${tx} ${ty}`;
-      path += ` L ${tgt.x} ${tgt.y}`;
-      
-      return { path, junctions };
+
+      // 2. V-H-V: preferred midY = (sy+ty)/2 + channelOffset
+      const baseMidY = (sy + ty) / 2 + channelOffset;
+      for (const s of fineShifts) {
+        const midY = baseMidY + s * step;
+        if (is3SegClear({x: sx, y: midY}, {x: tx, y: midY})) {
+          return {
+            path: `M ${src.x} ${src.y} L ${sx} ${sy} L ${sx} ${midY} L ${tx} ${midY} L ${tx} ${ty} L ${tgt.x} ${tgt.y}`,
+            junctions,
+          };
+        }
+      }
+
+      // 3. Wide box-detour for EAST→WEST feedback (source right of target)
+      if (src.side === 'EAST' && tgt.side === 'WEST' && tx <= sx) {
+        const detour = 80 + Math.abs(channelOffset);
+        const midY   = (sy + ty) / 2 + channelOffset;
+        return {
+          path: `M ${src.x} ${src.y} L ${sx} ${sy} L ${sx + detour} ${sy} L ${sx + detour} ${midY} L ${tx - detour} ${midY} L ${tx - detour} ${ty} L ${tx} ${ty} L ${tgt.x} ${tgt.y}`,
+          junctions,
+        };
+      }
+
+      // 4. Last resort: forced H-V-H at the preferred column (ignores obstacles)
+      return {
+        path: `M ${src.x} ${src.y} L ${sx} ${sy} L ${baseMidX} ${sy} L ${baseMidX} ${ty} L ${tx} ${ty} L ${tgt.x} ${tgt.y}`,
+        junctions,
+      };
     };
-    
+
     if (hasSections) {
       const sectionPath = edge.sections!
         .map((section) => {

@@ -1,6 +1,10 @@
-# Qsys Extension for Vscode with Draw.io Export
+# Quartus Qsys Extension for Vscode with Draw.io Export
 
-Qsys Viz is a Visual Studio Code extension that visualizes QSYS block‑design systems from Intel Quartus for FPGA development, making it easier and faster to inspect, navigate, and understand complex hardware designs directly within the VS Code editor.
+Quartus Qsys Viz is a Visual Studio Code extension that visualizes QSYS block‑design systems from Intel Quartus for FPGA development, making it easier and faster to inspect, navigate, and understand complex hardware designs directly within the VS Code editor.
+
+> **Disclaimer:**
+> This extension is an independent, community-developed tool and is not an official product of Intel or the Quartus Prime software suite.
+> It is provided “as-is” without any warranties, and Intel Corporation is not responsible for its functionality, support, or maintenance.
 
 Follow these steps to generate your .vsix file:
 

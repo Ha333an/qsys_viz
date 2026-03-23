@@ -1,7 +1,8 @@
 
-import React, { useState, useCallback, useMemo, useEffect } from 'react';
+import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { ElkNode, LayoutAlgorithm, LayoutDirection, LayoutOptions } from './types';
 import { convertQsysToElk, getKindColor } from './services/qsysConverter';
+import parseHwTclToElk from './services/hwTclParser';
 import ElkRenderer from './components/ElkRenderer';
 
 declare const ELK: any;
@@ -9,14 +10,22 @@ declare const ELK: any;
 type PortSide = 'NORTH' | 'SOUTH' | 'EAST' | 'WEST' | 'AUTO';
 
 const App: React.FC = () => {
+  const isDefaultKindVisible = useCallback((kind: string) => {
+    const lower = kind.toLowerCase();
+    if (lower.includes('reset') || lower.includes('interrupt') || lower.includes('conduit') || lower.includes('clock')) {
+      return false;
+    }
+    return true;
+  }, []);
+
   const buildVisibilityMap = useCallback((graph: ElkNode, previous?: Record<string, boolean>) => {
     const kinds = Array.from(new Set((graph.edges || []).map(edge => String(edge.meta?.['edge.type'] || edge.labels?.[0]?.text || 'unknown'))));
     const next: Record<string, boolean> = {};
     kinds.forEach(kind => {
-      next[kind] = previous?.[kind] ?? true;
+      next[kind] = previous?.[kind] ?? isDefaultKindVisible(kind);
     });
     return next;
-  }, []);
+  }, [isDefaultKindVisible]);
 
   const [originalGraph, setOriginalGraph] = useState<ElkNode | null>(null);
   const [layoutedGraph, setLayoutedGraph] = useState<ElkNode | null>(null);
@@ -29,8 +38,12 @@ const App: React.FC = () => {
   const [isVsCode, setIsVsCode] = useState(false);
   const [sidebarVisible, setSidebarVisible] = useState(true);
   const [addressMapVisible, setAddressMapVisible] = useState(false);
+  const [sidebarWidth, setSidebarWidth] = useState(280);
+  const [isResizingSidebar, setIsResizingSidebar] = useState(false);
   
   const [portOverrides, setPortOverrides] = useState<Record<string, PortSide>>({});
+
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const [options, setOptions] = useState<LayoutOptions>({
     algorithm: 'layered',
@@ -45,6 +58,25 @@ const App: React.FC = () => {
     const api = (window as any).acquireVsCodeApi;
     return typeof api === 'function' ? api() : null;
   }, []);
+
+  useEffect(() => {
+    const onMouseMove = (e: MouseEvent) => {
+      if (!isResizingSidebar) return;
+      const newWidth = Math.min(Math.max(240, window.innerWidth - e.clientX), 640);
+      setSidebarWidth(newWidth);
+    };
+
+    const onMouseUp = () => {
+      if (isResizingSidebar) setIsResizingSidebar(false);
+    };
+
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+    return () => {
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+    };
+  }, [isResizingSidebar]);
 
   const runLayout = useCallback(async (
     graph: ElkNode,
@@ -131,12 +163,17 @@ const App: React.FC = () => {
         if (opt.algorithm === 'layered') {
           node.properties['org.eclipse.elk.layered.spacing.nodeNodeBetweenLayers'] = '260';
           node.properties['org.eclipse.elk.layered.spacing.nodeNode'] = '260';
-          node.properties['org.eclipse.elk.layered.unnecessaryBends'] = 'true';
+          // false = remove redundant bend-points so wires stay clean
+          node.properties['org.eclipse.elk.layered.unnecessaryBendpoints'] = 'false';
           node.properties['org.eclipse.elk.layered.crossingMinimization.strategy'] = 'LAYER_SWEEP';
           node.properties['org.eclipse.elk.layered.layering.strategy'] = 'NETWORK_SIMPLEX';
           node.properties['org.eclipse.elk.layered.nodePlacement.strategy'] = 'BRANDES_KOEPF';
           node.properties['org.eclipse.elk.layered.nodePlacement.bk.fixedAlignment'] = 'BALANCED';
           node.properties['org.eclipse.elk.layered.orthogonal'] = opt.routing === 'ORTHOGONAL' ? 'true' : 'false';
+          // Give edges more breathing room between nodes so orthogonal segments
+          // can be routed cleanly without passing through node rectangles
+          node.properties['org.eclipse.elk.layered.edgeRouting.slopeUpperBoundAngle'] = '45.0';
+          node.properties['org.eclipse.elk.layered.wrapping.multiEdge.improveCuts'] = 'true';
         }
         node.children?.forEach(applyOptions);
       };
@@ -159,13 +196,6 @@ const App: React.FC = () => {
     }
   }, [vscodeApi]);
 
-  useEffect(() => {
-    const timeoutId = window.setTimeout(() => {
-      setSidebarVisible(false);
-    }, 2800);
-
-    return () => window.clearTimeout(timeoutId);
-  }, []);
 
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
@@ -196,10 +226,7 @@ const App: React.FC = () => {
     return () => window.removeEventListener('message', handleMessage);
   }, [options, visibleKinds, showParameters, runLayout, buildVisibilityMap]);
 
-    const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-      const file = e.target.files?.[0];
-      if (!file) return;
-
+    const processFile = (file: File) => {
       const reader = new FileReader();
       reader.onload = (event) => {
         const content = event.target?.result as string;
@@ -207,6 +234,10 @@ const App: React.FC = () => {
           let graph: ElkNode;
           if (file.name.endsWith('.qsys')) {
             graph = convertQsysToElk(content);
+          } else if (file.name.toLowerCase().endsWith('.tcl') || file.name.toLowerCase().endsWith('_hw.tcl')) {
+            const parsed = parseHwTclToElk(content, file.name);
+            if (!parsed) throw new Error('Failed to parse hw.tcl');
+            graph = parsed;
           } else {
             graph = JSON.parse(content);
           }
@@ -221,6 +252,24 @@ const App: React.FC = () => {
         }
       };
       reader.readAsText(file);
+    };
+
+    const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      processFile(file);
+    };
+
+    const handleDragOver = (e: React.DragEvent) => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'copy';
+    };
+
+    const handleDrop = (e: React.DragEvent) => {
+      e.preventDefault();
+      const file = e.dataTransfer.files?.[0];
+      if (!file) return;
+      processFile(file);
     };
 
   const handleNodeMove = useCallback((id: string, dx: number, dy: number) => {
@@ -421,7 +470,22 @@ const App: React.FC = () => {
     if (!selectedEdgeId || !layoutedGraph) return null;
     return layoutedGraph.edges?.find(e => e.id === selectedEdgeId) || null;
   }, [selectedEdgeId, layoutedGraph]);
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Delete') return;
+      const target = event.target as HTMLElement | null;
+      if (target && ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)) return;
 
+      if (selectedNodeId) {
+        event.preventDefault();
+        handleDeleteNode(selectedNodeId);
+        setSelectedNodeId(null);
+      }
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [selectedNodeId, handleDeleteNode]);
   useEffect(() => {
     if (!selectedNodeId && !selectedEdgeId) return;
 
@@ -443,8 +507,50 @@ const App: React.FC = () => {
     };
   }, [layoutedGraph]);
 
+  const renderAddressMapSection = () => (
+    <section className="p-3 bg-slate-50 rounded-lg border border-slate-100">
+      <div className="flex items-center justify-between mb-2">
+        <h4 className="text-[12px] font-black text-slate-400 uppercase tracking-widest">Address Map</h4>
+        <button onClick={() => setAddressMapVisible(false)} className="text-xs font-black text-slate-500 hover:text-slate-700">Close</button>
+      </div>
+      <button
+        onClick={exportAddressMapCsv}
+        disabled={addressMap.masters.length === 0 || addressMap.slaves.length === 0}
+        className="text-xs font-black text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-2.5 py-1 rounded disabled:opacity-50 disabled:cursor-not-allowed mb-2"
+      >
+        Export CSV
+      </button>
+      {addressMap.masters.length > 0 && addressMap.slaves.length > 0 ? (
+        <div className="overflow-auto max-h-64">
+          <table className="w-full text-xs border-collapse">
+            <thead>
+              <tr>
+                <th className="border border-slate-200 bg-slate-100 p-1 text-left">Slave / Master</th>
+                {addressMap.masters.map(master => (
+                  <th key={master} className="border border-slate-200 bg-slate-100 p-1 text-left">{master}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {addressMap.slaves.map(slave => (
+                <tr key={slave} className="odd:bg-white even:bg-slate-50/40">
+                  <td className="border border-slate-200 p-1">{slave}</td>
+                  {addressMap.masters.map(master => (
+                    <td key={`${slave}:${master}`} className="border border-slate-200 p-1">{addressMap.matrix[slave]?.[master] || ''}</td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <div className="text-sm text-slate-400 font-bold">No address map entries detected.</div>
+      )}
+    </section>
+  );
+
   return (
-    <div className="flex flex-col h-screen overflow-hidden bg-slate-100 font-sans">
+    <div onDragOver={handleDragOver} onDrop={handleDrop} className="flex flex-col h-screen overflow-hidden bg-slate-100 font-sans">
       <header className="no-print bg-white border-b border-slate-200 px-4 py-2 flex items-center justify-end shadow-sm z-10">
 
         <div className="flex items-center gap-2">
@@ -452,33 +558,26 @@ const App: React.FC = () => {
             <>
               <label className="flex items-center gap-2 text-sm font-bold text-slate-700 bg-slate-50 hover:bg-slate-100 border border-slate-200 px-4 py-2 rounded-lg cursor-pointer transition-all active:scale-95">
                 Import Qsys
-                <input type="file" className="hidden" accept=".json,.qsys" onChange={handleFileUpload} />
+                <input ref={fileInputRef} type="file" className="hidden" accept=".json,.qsys" onChange={handleFileUpload} />
               </label>
             </>
           )}
           <button onClick={exportToDrawIo} disabled={!layoutedGraph} className="flex items-center gap-2 text-sm font-bold text-slate-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-4 py-2 rounded-lg shadow-sm transition-all active:scale-95">
             Export Draw.io
           </button>
+          <button onClick={() => setAddressMapVisible(v => !v)} disabled={!layoutedGraph} className="flex items-center gap-2 text-sm font-bold text-slate-700 bg-sky-50 hover:bg-sky-100 border border-sky-200 px-4 py-2 rounded-lg shadow-sm transition-all active:scale-95">
+            {addressMapVisible ? 'Hide Address Map' : 'Address Map'}
+          </button>
+          <button onClick={() => setSidebarVisible(prev => !prev)} className="flex items-center gap-2 text-sm font-bold text-slate-700 bg-slate-50 hover:bg-slate-100 border border-slate-200 px-4 py-2 rounded-lg shadow-sm transition-all active:scale-95">
+            {sidebarVisible ? 'Hide Sidebar' : 'Show Sidebar'}
+          </button>
         </div>
       </header>
 
       <div className="flex flex-1 overflow-hidden relative">
-        {/* Hover trigger zone */}
-        <div 
-          className="absolute left-0 top-0 w-4 h-full z-40"
-          onMouseEnter={() => setSidebarVisible(true)}
-        />
-        <div className="no-print absolute left-0 top-1/2 -translate-y-1/2 z-30 pointer-events-none transition-opacity duration-200">
-          <div className={`border border-l-0 rounded-r-md px-2 py-2 shadow-sm ${sidebarVisible ? 'bg-slate-100/80 border-slate-200 opacity-40' : 'bg-indigo-100 border-indigo-300 opacity-95'}`}>
-            <div className="flex items-center text-slate-600">
-              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7" /></svg>
-            </div>
-          </div>
-        </div>
         {/* Left Sidebar */}
         <aside 
           className={`no-print w-80 bg-white border-r border-slate-200 p-4 flex flex-col gap-4 shadow-lg overflow-y-auto absolute left-0 top-0 h-full z-50 transition-transform duration-300 ease-in-out ${sidebarVisible ? 'translate-x-0' : '-translate-x-full'}`}
-          onMouseLeave={() => setSidebarVisible(false)}
         >
           <section>
             <h3 className="text-[13px] font-black text-slate-400 uppercase tracking-widest mb-3">Layout Options</h3>
@@ -582,7 +681,11 @@ const App: React.FC = () => {
 
           {/* Right Inspector Panel */}
           {selectedNode && (
-            <aside className="w-[280px] bg-white border-l border-slate-200 flex flex-col shadow-xl z-20 animate-in slide-in-from-right duration-300">
+            <aside className="bg-white border-l border-slate-200 flex flex-col shadow-xl z-20 animate-in slide-in-from-right duration-300 relative" style={{ width: sidebarWidth }}>
+              <div
+                className="absolute left-0 top-0 h-full w-0.5 cursor-col-resize bg-slate-300 hover:bg-slate-400"
+                onMouseDown={() => setIsResizingSidebar(true)}
+              />
               <div className="p-3 border-b border-slate-200 flex items-center justify-between bg-slate-50">
                 <div className="overflow-hidden">
                   <h3 className="text-base font-black text-slate-800 truncate">{selectedNode.labels?.[0]?.text}</h3>
@@ -645,12 +748,17 @@ const App: React.FC = () => {
                     </div>
                   </section>
                 )}
+                {addressMapVisible && renderAddressMapSection()}
               </div>
             </aside>
           )}
 
           {selectedEdge && !selectedNode && (
-            <aside className="w-[280px] bg-white border-l border-slate-200 flex flex-col shadow-xl z-20 animate-in slide-in-from-right duration-300">
+            <aside className="bg-white border-l border-slate-200 flex flex-col shadow-xl z-20 animate-in slide-in-from-right duration-300 relative" style={{ width: sidebarWidth }}>
+              <div
+                className="absolute left-0 top-0 h-full w-0.5 cursor-col-resize bg-slate-300 hover:bg-slate-400"
+                onMouseDown={() => setIsResizingSidebar(true)}
+              />
               <div className="p-3 border-b border-slate-200 flex items-center justify-between bg-slate-50">
                 <div className="overflow-hidden">
                   <h3 className="text-base font-black text-slate-800 truncate">Net Details</h3>
@@ -700,7 +808,22 @@ const App: React.FC = () => {
                     {selectedEdge.meta?.['data.width'] || selectedEdge.meta?.['width'] || selectedEdge.meta?.['edge.width'] || 'Unknown'}
                   </div>
                 </section>
+                {addressMapVisible && renderAddressMapSection()}
               </div>
+            </aside>
+          )}
+
+          {!selectedNode && !selectedEdge && addressMapVisible && (
+            <aside className="bg-white border-l border-slate-200 flex flex-col shadow-xl z-20 animate-in slide-in-from-right duration-300 relative" style={{ width: sidebarWidth }}>
+              <div
+                className="absolute left-0 top-0 h-full w-0.5 cursor-col-resize bg-slate-300 hover:bg-slate-400"
+                onMouseDown={() => setIsResizingSidebar(true)}
+              />
+              <div className="p-3 border-b border-slate-200 flex items-center justify-between bg-slate-50">
+                <h3 className="text-base font-black text-slate-800">Address Map</h3>
+                <button onClick={() => setAddressMapVisible(false)} className="p-1.5 hover:bg-slate-200 rounded-md text-slate-400">✕</button>
+              </div>
+              <div className="flex-1 overflow-y-auto p-3">{renderAddressMapSection()}</div>
             </aside>
           )}
 
@@ -713,64 +836,7 @@ const App: React.FC = () => {
              </div>
           )}
 
-          <button
-            onClick={() => setAddressMapVisible(v => !v)}
-            className="no-print absolute left-4 bottom-4 z-40 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black px-3 py-2 rounded-lg shadow-lg border border-indigo-700"
-          >
-            {addressMapVisible ? 'Hide Address Map' : 'Address Map'}
-          </button>
 
-          {addressMapVisible && (
-            <section className="no-print absolute left-4 bottom-16 z-50 w-[min(980px,calc(100%-2rem))] max-h-[45vh] bg-white border border-slate-200 rounded-xl shadow-xl overflow-hidden">
-              <div className="px-4 py-2 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
-                <h3 className="text-sm font-black text-slate-700 uppercase tracking-widest">Address Map</h3>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={exportAddressMapCsv}
-                    disabled={addressMap.masters.length === 0 || addressMap.slaves.length === 0}
-                    className="text-xs font-black text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-2.5 py-1 rounded disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    Export CSV
-                  </button>
-                  <button
-                    onClick={() => setAddressMapVisible(false)}
-                    className="text-xs font-black text-slate-500 hover:text-slate-700 px-2 py-1 rounded"
-                  >
-                    Close
-                  </button>
-                </div>
-              </div>
-
-              {addressMap.masters.length > 0 && addressMap.slaves.length > 0 ? (
-                <div className="overflow-auto max-h-[calc(45vh-44px)]">
-                  <table className="min-w-full text-xs">
-                    <thead className="bg-slate-50">
-                      <tr>
-                        <th className="text-left px-3 py-2 font-black text-slate-500 border-b border-slate-200 sticky left-0 bg-slate-50">Slave \ Master</th>
-                        {addressMap.masters.map(master => (
-                          <th key={master} className="text-left px-3 py-2 font-black text-slate-500 border-b border-slate-200 whitespace-nowrap">{master}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {addressMap.slaves.map(slave => (
-                        <tr key={slave} className="odd:bg-white even:bg-slate-50/40">
-                          <td className="px-3 py-2 font-bold text-slate-700 border-b border-slate-100 sticky left-0 bg-inherit whitespace-nowrap">{slave}</td>
-                          {addressMap.masters.map(master => (
-                            <td key={`${slave}:${master}`} className="px-3 py-2 text-slate-600 border-b border-slate-100 whitespace-nowrap">
-                              {addressMap.matrix[slave]?.[master] || ''}
-                            </td>
-                          ))}
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              ) : (
-                <div className="px-4 py-3 text-sm text-slate-400 font-bold">No address map entries detected.</div>
-              )}
-            </section>
-          )}
         </main>
       </div>
     </div>
